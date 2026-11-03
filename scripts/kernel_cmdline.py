@@ -13,7 +13,8 @@ PLATFORM_OPTIONS = [
 
 
 def build(text):
-    args = shlex.split(text)
+    # A drop-in that appends a quoted argument (zz-p16-keyboard.conf: ' acpi_osi=...') leaves its spaces in the token.
+    args = [a.strip() for a in shlex.split(text) if a.strip()]
     if not any(a.startswith(('root=', 'rd.luks.name=', 'cryptdevice=')) for a in args):
         raise ValueError('Run from the installed system, not the live ISO.')
     blocked = ('BOOT_IMAGE=', 'initrd=', 'acpi_osi=', 'console=', 'acpi=',
