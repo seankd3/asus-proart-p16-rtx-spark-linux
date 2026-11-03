@@ -3,7 +3,7 @@
     "repository": "https://github.com/omacom/omarchy-pkgs",
     "commit": "9db7ac36d410aca6d571975be1a5a77677918569",
     "path": "pkgbuilds/linux-omarchy-aarch64",
-    "version": "7.2.8-23"
+    "version": "7.2.8-24"
   },
   "acpi": {
     "repository": "https://github.com/pfeifferj/archlinuxarm-proart-p16",

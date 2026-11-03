@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 REPO=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-RELEASE=7.2.8-23-omarchy-p16-asus
+RELEASE=7.2.8-24-omarchy-p16-asus
 check_model() {
   [[ $(uname -m) == aarch64 ]] || { echo 'AArch64 required.' >&2; exit 1; }
   [[ $(cat /sys/class/dmi/id/sys_vendor) == ASUS &&

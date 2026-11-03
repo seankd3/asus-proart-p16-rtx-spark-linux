@@ -6,8 +6,8 @@ if not Path('/sys/class/dmi/id/product_name').read_text().strip() == 'ProArt P16
 p = Path('/sys/class/power_supply/BAT0/charge_control_end_threshold')
 for attempt in range(75):
     if p.exists():
-        p.write_text('100\n')
-        if not p.read_text().strip() == '100':
+        p.write_text('80\n')
+        if not p.read_text().strip() == '80':
             raise ValueError('Validierung fehlgeschlagen')
         break
     time.sleep(0.2)

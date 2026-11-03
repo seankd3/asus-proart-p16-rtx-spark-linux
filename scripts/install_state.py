@@ -8,8 +8,8 @@ from pathlib import Path
 import shutil
 import tempfile
 
-RELEASE = '7.2.8-23-omarchy-p16-asus'
-TARGET = '/boot/EFI/Linux/omarchy_linux-p16-asus-23.efi'
+RELEASE = '7.2.8-24-omarchy-p16-asus'
+TARGET = '/boot/EFI/Linux/omarchy_linux-p16-asus-24.efi'
 CONFIG_PATHS = [
     '/boot/limine.conf', '/etc/vconsole.conf', '/etc/initcpio/install/p16-acpi',
     '/etc/mkinitcpio.conf.d/zz-p16-hardware-fixes.conf',
@@ -58,7 +58,7 @@ def boot_environment(root):
         fields = desc.read_text().splitlines()
         name = fields[fields.index('%NAME%') + 1]
         version = fields[fields.index('%VERSION%') + 1]
-        if name in ('linux-p16-asus-23', 'linux-p16-asus-23-headers'):
+        if name in ('linux-p16-asus-24', 'linux-p16-asus-24-headers'):
             continue
         if name.startswith(('linux-', 'nvidia', 'libnvidia', 'opencl-nvidia')):
             packages[name] = version
