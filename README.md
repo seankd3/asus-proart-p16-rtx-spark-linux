@@ -28,7 +28,7 @@ origins and local adaptations in [Provenance and local additions](#provenance-an
 | NVIDIA graphics | NVIDIA open DKMS setup, early module loading, DRM modesetting/fbdev and a block on the conflicting legacy `nvidiafb` driver |
 | USB4 and boot configuration | Explicit USB4 resource retention, PCI hotplug reservations, suspend-to-idle selection and the SimpleDRM workaround |
 | Power and temperature monitoring | A temperature CLI and the pinned [RTX Spark `spark_hwmon` driver](https://github.com/johannhartmann/spark_hwmon/tree/rtx-spark), with 15 power readings, eight temperatures and four reduction-only power-limit controls on the validated firmware |
-| CUDA | Toolkit installation, an `sm_121` GPU verification program and NVIDIA container setup instructions |
+| CUDA | Toolkit installation, an `sm_121` GPU verification program, an exact cuBLAS GEMM diagnostic and NVIDIA container setup instructions |
 | Installation and recovery | Checked source inputs, a separate kernel/UKI, configuration and EFI backups, Limine hash verification and rollback tools |
 
 The kernel recipe and P16 patches are included here. The `spark_hwmon` source,
@@ -353,6 +353,17 @@ nvcc --version
 ```
 
 The toolkit is installed under `/opt/cuda`. The test compiles for **`sm_121`** and verifies all 4096 results of a GPU vector addition. Success produces `"result":"passed"`. NVIDIA-SMI reports the driver's CUDA capability; `nvcc --version` reports the installed toolkit version. Prebuilt PyTorch wheels also have their own CUDA runtime version.
+
+`scripts/gemm.py` keeps the GPU busy with a dense 4096 x 4096 cuBLAS matrix multiply and prints the achieved rate about each second. It measures throughput only. It does not read clocks or power, so record GPU telemetry separately during the run. To compare FP32 and BF16 inputs on the same boot:
+
+```bash
+python3 -I scripts/gemm.py 30 fp32
+python3 -I scripts/gemm.py 30 bf16
+```
+
+The first argument is the run time in seconds: a finite number above 0, default 60, maximum 300. The second argument selects the input type (default `fp32`). Both input types write FP32 output, accumulate in FP32 and use the default cuBLAS algorithm. The tool checks sampled results exactly after the warm-up call and at the end, and both lines must show `mismatches 0`. It loads `libcublas.so.13` from the toolkit. To use cuBLAS from a different location, set `LD_LIBRARY_PATH` for the command.
+
+A result applies only to these two input types. It is not a peak-rate or tensor-core measurement, and a high clock in one run does not prove a fix.
 
 To enable GPU access in Docker:
 
