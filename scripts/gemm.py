@@ -9,15 +9,16 @@ integer, so the result is checked exactly on sampled entries after the warm-up c
 work runs after a failed warm-up check. No math mode is set (the default is reported).
 The dynamic loader finds libcublas.so.13 (the CUDA toolkit, or LD_LIBRARY_PATH) and libcuda.so.1 (the driver).
 Exit 0: both checks passed. 1: usage, or a CUDA or cuBLAS call failed. 3: an exact check failed.
-Usage: gemm.py [SECONDS [fp32|bf16]]   (default 60 fp32, max 300)"""
-import array, ctypes as C, sys, time
+Usage: gemm.py [SECONDS [fp32|bf16]]   (SECONDS finite and > 0, max 300; default 60 fp32)"""
+import array, ctypes as C, math, sys, time
 ROWS = {"fp32": (0, 4), "bf16": (14, 2)}                   # inputs: cudaDataType (CUDA_R_32F, CUDA_R_16BF), bytes
 CTYPE, COMPUTE, ALGO = 0, 68, -1                           # CUDA_R_32F, CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT
-try:
-    secs, name = sys.argv[1:] + ["60", "fp32"][len(sys.argv) - 1:]   # missing arguments take the defaults
-    secs, (atype, width) = min(float(secs), 300), ROWS[name]
-except (ValueError, KeyError):
-    raise SystemExit(__doc__.splitlines()[-1])
+def args(secs="60", name="fp32"):                          # checked before any library loads
+    secs = float(secs)
+    if not (0 < secs < math.inf and name in ROWS): raise ValueError
+    return min(secs, 300), name, *ROWS[name]
+try: secs, name, atype, width = args(*sys.argv[1:])
+except (TypeError, ValueError): raise SystemExit(__doc__.splitlines()[-1])
 N = 4096
 FLOP = 2.0 * N * N * N
 
@@ -77,10 +78,11 @@ e0, e1 = C.c_void_p(), C.c_void_p()
 ck(cu.cuEventCreate(C.byref(e0), 0), "cuEventCreate"); ck(cu.cuEventCreate(C.byref(e1), 0), "cuEventCreate")
 end = time.monotonic() + (secs if ok else 0)               # bad warm-up math: no timed work, exit 3
 while time.monotonic() < end:
-    calls, host, ws = 0, 0.0, time.monotonic(); wend = ws + 1.0
+    calls, host, ws = 0, 0.0, time.monotonic()
     ck(cu.cuEventRecord(e0, None), "cuEventRecord")
-    while time.monotonic() < wend:
+    while True:                                            # a window ends after its first call past 1 s
         t = time.perf_counter(); gemm(); ck(cu.cuCtxSynchronize(), "sync"); host += time.perf_counter() - t; calls += 1
+        if time.monotonic() >= ws + 1.0: break
     ck(cu.cuEventRecord(e1, None), "cuEventRecord"); ck(cu.cuEventSynchronize(e1), "cuEventSynchronize")
     ms = C.c_float(); ck(cu.cuEventElapsedTime(C.byref(ms), e0, e1), "cuEventElapsedTime")
     print(f"{time.strftime('%H:%M:%S')} calls {calls} host_s {host:.4f} event_s {ms.value / 1e3:.4f} "

@@ -354,14 +354,14 @@ nvcc --version
 
 The toolkit is installed under `/opt/cuda`. The test compiles for **`sm_121`** and verifies all 4096 results of a GPU vector addition. Success produces `"result":"passed"`. NVIDIA-SMI reports the driver's CUDA capability; `nvcc --version` reports the installed toolkit version. Prebuilt PyTorch wheels also have their own CUDA runtime version.
 
-`scripts/gemm.py` keeps the GPU busy with a dense 4096 x 4096 cuBLAS matrix multiply and prints the achieved rate each second. Use it to see the GPU clock state under FP32 and BF16 inputs on the same boot:
+`scripts/gemm.py` keeps the GPU busy with a dense 4096 x 4096 cuBLAS matrix multiply and prints the achieved rate about each second. It measures throughput only. It does not read clocks or power, so record GPU telemetry separately during the run. To compare FP32 and BF16 inputs on the same boot:
 
 ```bash
 python3 -I scripts/gemm.py 30 fp32
 python3 -I scripts/gemm.py 30 bf16
 ```
 
-The first argument is the run time in seconds (default 60, maximum 300). The second argument selects the input type (default `fp32`). Both input types write FP32 output, accumulate in FP32 and use the default cuBLAS algorithm. The tool checks sampled results exactly after the warm-up call and at the end, and both lines must show `mismatches 0`. It loads `libcublas.so.13` from the toolkit. To use cuBLAS from a different location, set `LD_LIBRARY_PATH` for the command.
+The first argument is the run time in seconds: a finite number above 0, default 60, maximum 300. The second argument selects the input type (default `fp32`). Both input types write FP32 output, accumulate in FP32 and use the default cuBLAS algorithm. The tool checks sampled results exactly after the warm-up call and at the end, and both lines must show `mismatches 0`. It loads `libcublas.so.13` from the toolkit. To use cuBLAS from a different location, set `LD_LIBRARY_PATH` for the command.
 
 A result applies only to these two input types. It is not a peak-rate or tensor-core measurement, and a high clock in one run does not prove a fix.
 
