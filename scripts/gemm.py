@@ -6,7 +6,8 @@ synchronized calls, and a CUDA event span over the whole window (which also incl
 calls). Both input types write FP32 output and accumulate in FP32 (CUBLAS_COMPUTE_32F) with the default algorithm.
 A and B hold small integers, which are exact in BF16 and FP32. Every product and partial sum is an exact FP32
 integer, so the result is checked exactly on sampled entries after the warm-up call and at the end. No timed
-work runs after a failed warm-up check. No math mode is set (the default is reported).
+work runs after a failed warm-up check. After a good one, the run holds at least one window.
+No math mode is set (the default is reported).
 The dynamic loader finds libcublas.so.13 (the CUDA toolkit, or LD_LIBRARY_PATH) and libcuda.so.1 (the driver).
 Exit 0: both checks passed. 1: usage, or a CUDA or cuBLAS call failed. 3: an exact check failed.
 Usage: gemm.py [SECONDS [fp32|bf16]]   (SECONDS finite and > 0, max 300; default 60 fp32)"""
@@ -76,8 +77,8 @@ gemm(); ck(cu.cuCtxSynchronize(), "warm-up sync")             # library load / h
 ok = verify("warmup")
 e0, e1 = C.c_void_p(), C.c_void_p()
 ck(cu.cuEventCreate(C.byref(e0), 0), "cuEventCreate"); ck(cu.cuEventCreate(C.byref(e1), 0), "cuEventCreate")
-end = time.monotonic() + (secs if ok else 0)               # bad warm-up math: no timed work, exit 3
-while time.monotonic() < end:
+end = time.monotonic() + secs
+while ok:                                                  # bad warm-up math: no timed work, exit 3
     calls, host, ws = 0, 0.0, time.monotonic()
     ck(cu.cuEventRecord(e0, None), "cuEventRecord")
     while True:                                            # a window ends after its first call past 1 s
@@ -88,6 +89,7 @@ while time.monotonic() < end:
     print(f"{time.strftime('%H:%M:%S')} calls {calls} host_s {host:.4f} event_s {ms.value / 1e3:.4f} "
           f"host_gflops {calls * FLOP / host / 1e9:.1f} event_gflops {calls * FLOP / (ms.value / 1e3) / 1e9:.1f} "
           f"mono_start {ws:.3f} mono_end {time.monotonic():.3f}", flush=True)   # CLOCK_MONOTONIC, shared by all processes
+    if time.monotonic() >= end: break                      # the run ends after its first window past SECONDS
 ok = ok and verify("end")
 for d in (dA, dB, dC): ck(cu.cuMemFree_v2(d.value), "cuMemFree")
 ck(bl.cublasDestroy_v2(h), "cublasDestroy"); ck(cu.cuDevicePrimaryCtxRelease_v2(dev), "cuDevicePrimaryCtxRelease")
