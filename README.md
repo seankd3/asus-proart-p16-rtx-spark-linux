@@ -428,6 +428,8 @@ After a BIOS update, do not boot the P16 kernel with the old ACPI overrides. Boo
 
 SPI-HID provides the sensor hub transport. Complete sensor measurements, physical charge cutoff, fan response, suspend/resume, NVENC/NVDEC and thermal shutdown require separate testing. ASUS Armoury and custom fan curves are not enabled. Some optional NVML power and memory metrics may be unavailable on N1X.
 
+To record which NVPCF route the 620 `nvidia-powerd` takes at start, see [NVPCF route trace](docs/powerd620-nvpcf-trace.md).
+
 ### NVIDIA DRM mapping review (2026-10-25)
 
 Josephine Pfeiffer's [Normal-NC candidate patch](https://github.com/pfeifferj/archlinuxarm-proart-p16/blob/3484cc008a9ee00b34c086c729e28e935cbc3430/02-drivers/nvidia-display/patches/provenance/hardware/drm.patch)
