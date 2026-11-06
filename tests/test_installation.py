@@ -392,6 +392,14 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(keyfile.get_keys('UPower')[0], ['CriticalPowerAction'])
         self.assertEqual(keyfile.get_string('UPower', 'CriticalPowerAction'), 'PowerOff')
 
+    def test_quoted_dropin_argument_is_replaced(self):
+        # A 7.2.8-23 boot got zz-p16-keyboard.conf's value with its single quotes, and the install refused it.
+        result = cmdline.build("root=/dev/mapper/root ' acpi_osi=\"!Windows 2022\"' 'rootflags=subvol=system ' quiet")
+        self.assertEqual(result.count('acpi_osi='), 1)
+        self.assertIn('acpi_osi="!Windows 2022"', result)
+        # A kept argument keeps its exact value, spaces included.
+        self.assertIn('"rootflags=subvol=system "', result)
+
     def test_live_iso_is_rejected(self):
         with self.assertRaises(ValueError):
             cmdline.build('quiet splash')
