@@ -3,6 +3,7 @@ Description=Initialize validated P16 ASUS controls before power profile discover
 ConditionKernelVersion=|7.2.8-14-omarchy-p16-asus
 ConditionKernelVersion=|7.2.8-23-omarchy-p16-asus
 ConditionKernelVersion=|7.2.8-24-omarchy-p16-asus
+ConditionKernelVersion=|7.2.8-25-omarchy-p16-asus
 ConditionKernelVersion=|7.2.8-23-omarchy-p16-asus-npu2
 ConditionKernelVersion=|7.2.8-23-rtx-spark-npu
 Before=power-profiles-daemon.service p16-charge-limit.service

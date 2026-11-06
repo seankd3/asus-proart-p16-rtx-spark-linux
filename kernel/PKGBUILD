@@ -2,10 +2,10 @@
 # Adopted from the Arch Linux linux package.
 
 # Versioned P16 package: preserve earlier working kernels alongside this build.
-pkgbase=linux-p16-asus-24
-_kernel=linux-p16-asus-24
+pkgbase=linux-p16-asus-25
+_kernel=linux-p16-asus-25
 pkgver=7.2.8
-pkgrel=24
+pkgrel=25
 pkgdesc='Omarchy kernel for ASUS ProArt P16 H7607BA.300 (N1X, ACPI, SPI HID, ASUS WMI)'
 url='https://omarchy.org'
 arch=(
