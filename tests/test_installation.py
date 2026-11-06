@@ -9,11 +9,16 @@ import runpy
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / 'scripts'))
+from p16_release import IMAGE  # noqa: E402
+
+P16_EFI = Path(IMAGE).name
 
 
 def module(name, filename):
@@ -36,7 +41,7 @@ class MenuTests(unittest.TestCase):
         self.images = self.root / 'EFI/Linux'
         self.images.mkdir(parents=True)
         self.config = self.root / 'limine.conf'
-        for name in ['stock.efi', 'omarchy_linux-p16-asus-24.efi']:
+        for name in ['stock.efi', P16_EFI]:
             (self.images / name).write_bytes(name.encode())
 
     def entry(self, name):
@@ -48,7 +53,7 @@ class MenuTests(unittest.TestCase):
         boot.verify_menu(self.config, self.root)
 
     def test_valid_stock_and_p16(self):
-        self.verify(self.entry('omarchy_linux-p16-asus-24.efi'))
+        self.verify(self.entry(P16_EFI))
 
     def test_missing_p16_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'P16-Eintrag fehlt'):
@@ -58,25 +63,25 @@ class MenuTests(unittest.TestCase):
         for suffix in ['', '#INVALID', '#'+'a'*127, '#'+'a'*129, '#'+'a'*128+'junk']:
             with self.subTest(suffix=suffix):
                 with self.assertRaisesRegex(ValueError, 'gültigen BLAKE2b'):
-                    self.verify('path: boot():/EFI/Linux/omarchy_linux-p16-asus-24.efi'+suffix+'\n')
+                    self.verify('path: boot():' + IMAGE + suffix+'\n')
 
     def test_wrong_hash_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'Hash stimmt nicht'):
-            self.verify('path: boot():/EFI/Linux/omarchy_linux-p16-asus-24.efi#'+'0'*128+'\n')
+            self.verify('path: boot():' + IMAGE + '#'+'0'*128+'\n')
 
     def test_missing_image_is_rejected(self):
-        entry = self.entry('omarchy_linux-p16-asus-24.efi')
-        (self.images / 'omarchy_linux-p16-asus-24.efi').unlink()
+        entry = self.entry(P16_EFI)
+        (self.images / P16_EFI).unlink()
         with self.assertRaises(OSError):
             self.verify(entry)
 
     def test_comments_do_not_supply_missing_entry(self):
         with self.assertRaisesRegex(ValueError, 'P16-Eintrag fehlt'):
-            self.verify('# '+self.entry('omarchy_linux-p16-asus-24.efi'))
+            self.verify('# '+self.entry(P16_EFI))
 
     def test_conflicting_menu_options_are_rejected(self):
         with self.assertRaises(ValueError):
-            self.verify(self.entry('omarchy_linux-p16-asus-24.efi'), 'quiet: yes\nquiet: no\ntimeout: 10\n')
+            self.verify(self.entry(P16_EFI), 'quiet: yes\nquiet: no\ntimeout: 10\n')
 
     def test_path_traversal_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'außerhalb'):
@@ -174,6 +179,7 @@ class BackupTests(unittest.TestCase):
         python = commands/'python3'
         python.write_text('#!/usr/bin/python3\n'
                           'import importlib.util, os, pathlib, sys\n'
+                          'sys.path.insert(0, os.path.dirname(os.environ["TEST_STATE_MODULE"]))\n'
                           'spec=importlib.util.spec_from_file_location("state", os.environ["TEST_STATE_MODULE"])\n'
                           'm=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\n'
                           'm.restore(pathlib.Path(sys.argv[3]), pathlib.Path(os.environ["TEST_ROOT"]), status="failed")\n')
@@ -269,6 +275,8 @@ class ValidationTests(unittest.TestCase):
             root = Path(tmp)
             (root/'scripts').mkdir()
             shutil.copy2(REPO/'scripts/common.sh', root/'scripts/common.sh')
+            (root/'kernel').mkdir()
+            shutil.copy2(REPO/'kernel/PKGBUILD', root/'kernel/PKGBUILD')
             env = dict(os.environ, SUDO_UID=str(os.getuid()), SUDO_GID=str(os.getgid()))
             subprocess.run(['bash', '-c', 'source "$1"; prepare_build_dir', 'bash', str(root/'scripts/common.sh')], env=env, check=True)
             build = root/'build'

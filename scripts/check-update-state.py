@@ -3,6 +3,8 @@
 from pathlib import Path
 import subprocess
 
+from p16_release import PACKAGE, RELEASE
+
 ROOT = Path(__file__).resolve().parents[1]
 FILES = {
     'config/p16-acpi': '/etc/initcpio/install/p16-acpi',
@@ -30,15 +32,15 @@ def main():
     keyboard = Path('/etc/limine-entry-tool.d/zz-p16-keyboard.conf')
     if not keyboard.is_file() or 'acpi_osi=' not in keyboard.read_text():
         issues.append('P16 keyboard ACPI option missing')
-    for name in ('linux-p16-asus-23', 'linux-p16-asus-23-headers'):
+    for name in (PACKAGE, PACKAGE + '-headers'):
         if subprocess.run(['pacman', '-Q', name], capture_output=True).returncode:
             issues.append(f'{name} package missing')
     nvidia = subprocess.run(['pacman', '-Q', 'nvidia-utils'], text=True, capture_output=True)
-    module = subprocess.run(['modinfo', '-k', '7.2.8-23-omarchy-p16-asus',
+    module = subprocess.run(['modinfo', '-k', RELEASE,
                              '-F', 'version', 'nvidia'], text=True, capture_output=True)
     if nvidia.returncode or module.returncode or nvidia.stdout.split()[1].rsplit('-', 1)[0] != module.stdout.strip():
         issues.append('NVIDIA module for the P16 kernel does not match installed userspace')
-    if subprocess.run(['modinfo', '-k', '7.2.8-23-omarchy-p16-asus', 'spbm'],
+    if subprocess.run(['modinfo', '-k', RELEASE, 'spbm'],
                       capture_output=True).returncode:
         issues.append('spark_hwmon/spbm module for the P16 kernel is missing')
     if not Path('/etc/pacman.d/hooks/zz-p16-boot-menu.hook').is_file():

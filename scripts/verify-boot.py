@@ -7,7 +7,7 @@ import re
 import struct
 import subprocess
 import tempfile
-RELEASE = '7.2.8-24-omarchy-p16-asus'
+from p16_release import IMAGE, PACKAGE, RELEASE
 PINS = {'DSDT.aml': '80e0ad4a051704003d09029cb600a9814e1cd370ce774b9749dc09d2232b5aaf', 'SSDT.aml': '9b28ffc14c19f8b7ea2278de88ff9ec070f5f70401107d81fef067a916aa9695'}
 
 def sections(path):
@@ -86,7 +86,7 @@ def verify_image(path):
                     raise ValueError(line)
         if not subprocess.check_output(['modinfo', '-k', RELEASE, '-F', 'vermagic', name], text=True).split()[0] == RELEASE:
             raise ValueError('Falsche Modulversion: ' + name)
-    if not subprocess.check_output(['pacman', '-Qoq', '/usr/lib/modules/' + RELEASE + '/vmlinuz'], text=True).strip() == 'linux-p16-asus-24':
+    if not subprocess.check_output(['pacman', '-Qoq', '/usr/lib/modules/' + RELEASE + '/vmlinuz'], text=True).strip() == PACKAGE:
         raise ValueError('Kernelimage gehört nicht zum P16-Paket')
     print('UKI, ACPI-Overrides und Modulabhängigkeiten gültig:', path)
 
@@ -107,7 +107,7 @@ def verify_menu(config_path=Path('/boot/limine.conf'), boot_root=Path('/boot')):
             if hashlib.blake2b(image.read_bytes()).hexdigest() != pin.lower():
                 raise ValueError('EFI-Hash stimmt nicht: ' + path)
             entries.append(path)
-    if '/EFI/Linux/omarchy_linux-p16-asus-24.efi' not in entries:
+    if IMAGE not in entries:
         raise ValueError('P16-Eintrag fehlt im Limine-Menü')
     for key, expected in [('quiet', 'no'), ('timeout', '10')]:
         values = re.findall(r'^' + key + r':\s*(.*?)\s*$', config, re.M)
@@ -117,7 +117,7 @@ def verify_menu(config_path=Path('/boot/limine.conf'), boot_root=Path('/boot')):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--image', type=Path, default=Path('/boot/EFI/Linux/omarchy_linux-p16-asus-24.efi'))
+    parser.add_argument('--image', type=Path, default=Path('/boot' + IMAGE))
     parser.add_argument('--image-only', action='store_true')
     args = parser.parse_args()
     try:
