@@ -39,7 +39,7 @@ finish() {
   if [[ -n $hooks ]]; then rm -rf "$hooks"; fi
   if (( code != 0 )) && [[ -n $backup && -f $backup/state.json ]]; then
     if python3 "$REPO/scripts/install_state.py" fail "$backup"; then
-      systemctl daemon-reload || true
+      reload_restored_config || true
       sync || true
       echo 'Bootdateien und Konfiguration wurden auf den gesicherten Stand zurückgesetzt.' >&2
     else

@@ -178,18 +178,22 @@ class BackupTests(unittest.TestCase):
                           'm=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\n'
                           'm.restore(pathlib.Path(sys.argv[3]), pathlib.Path(os.environ["TEST_ROOT"]), status="failed")\n')
         python.chmod(0o755)
+        calls=self.base/'systemctl.calls'
         for name in ['systemctl', 'sync']:
             executable=commands/name
-            executable.write_text('#!/bin/sh\nexit 0\n')
+            executable.write_text(f'#!/bin/sh\necho "$0 $*" >> {calls}\nexit 0\n')
             executable.chmod(0o755)
         source=(REPO/'scripts/install-kernel.sh').read_text()
         handler=source[source.index('finish() {'):source.index('if [[ -n $resume_backup ]]; then')]
-        env=dict(os.environ, REPO=str(REPO), backup=str(self.backup), hooks='',
+        env=dict(os.environ, backup=str(self.backup), hooks='',
                  PATH=str(commands)+':'+os.environ['PATH'], TEST_ROOT=str(self.root),
                  TEST_STATE_MODULE=str(REPO/'scripts/install_state.py'))
-        process=subprocess.run(['bash', '-c', handler+'\nexit 7\n'], env=env, capture_output=True, text=True)
+        script='source '+str(REPO/'scripts/common.sh')+'\n'+handler+'\nexit 7\n'
+        process=subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True)
         self.assertEqual(process.returncode, 7, process.stderr)
         self.assertIn('--resume', process.stderr)
+        # Rollback restores UPower's file, so the daemon must read it again.
+        self.assertIn('systemctl try-restart upower.service', calls.read_text())
         self.assertEqual(self.efi.read_bytes(), b'original complete EFI bytes')
         self.assertEqual(state.load(self.backup)['status'], 'failed')
 

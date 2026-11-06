@@ -15,6 +15,12 @@ check_machine() {
     echo 'Installation requires BIOS H7607BA.300.' >&2; exit 1;
   }
 }
+# Restored files take effect only when their readers load them again: systemd
+# for units, and UPower, which reads its configuration only at start.
+reload_restored_config() {
+  systemctl daemon-reload
+  systemctl try-restart upower.service
+}
 require_root() { [[ $EUID == 0 ]] || { echo "Mit sudo ausführen: $0" >&2; exit 1; }; }
 
 # The dump runs as root, but all subsequent compilation runs as the owner.
