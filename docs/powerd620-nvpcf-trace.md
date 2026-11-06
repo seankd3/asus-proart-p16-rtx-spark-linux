@@ -7,21 +7,31 @@ platform values. The trace forces and overrides nothing. The offsets fit only th
 
 ## Run
 
-Boot the `@nv620` root with bpftrace 0.27.0 and no `nvidia-powerd` process. Start the trace once.
+Boot the `@nv620` root with bpftrace 0.27.0 and no `nvidia-powerd` process. Set `REPO` to this repository and
+`RUNS` to an existing private directory. Start the trace once. Each start writes to a new directory under `RUNS`.
 
 ```bash
-R=<new private run directory>; mkdir -m 700 "$R"; cd "$R"
-[ "$(findmnt -no FSROOT /)" = /@nv620 ] || exit 9
-echo 'eb9e0371f73667f242e8d4742e17a21a68470e08cdc6438a84c263a4c3b6f4d2  /usr/bin/nvidia-powerd' | sha256sum -c --quiet || exit 9
-[ "$(pgrep -xc nvidia-powerd)" = 0 ] || exit 9
-sudo -n timeout -k 5 60 bpftrace -k -v -q -o T-trace.txt -c /usr/bin/nvidia-powerd \
-  <repository>/scripts/powerd620-nvpcf-branch.bt 2> T-stderr.txt; echo "rc=$?" > T-rc.txt
-pgrep -xc nvidia-powerd; pgrep -xc bpftrace
+(
+  set -eu; umask 077
+  B=${REPO:?set REPO}/scripts/powerd620-nvpcf-branch.bt; [ -f "$B" ]
+  [ "$(findmnt -no FSROOT /)" = /@nv620 ]
+  echo 'eb9e0371f73667f242e8d4742e17a21a68470e08cdc6438a84c263a4c3b6f4d2  /usr/bin/nvidia-powerd' | sha256sum -c --quiet
+  [ "$(pgrep -xc nvidia-powerd)" = 0 ]
+  R=$(mktemp -d "${RUNS:?set RUNS}/powerd620-trace-XXXXXX"); cd "$R"; echo "run directory: $R"
+  set +e
+  sudo -n timeout -k 5 60 bpftrace -k -v -q -o T-trace.txt -c /usr/bin/nvidia-powerd "$B" 2> T-stderr.txt
+  rc=$?; echo "rc=$rc" > T-rc.txt
+  { pgrep -xc nvidia-powerd; pgrep -xc bpftrace; } > T-after.txt
+  exit "$rc"
+)
 ```
 
+If a setup check fails, the subshell stops before it makes the run directory or starts the trace. The trace
+exit code and stderr are kept when they are nonzero, and the subshell exits with the trace exit code.
+
 `-k` reports probe-read errors, which bpftrace hides by default. `-v` logs `Child exited with code: N` or
-`Child terminated by signal: N`. At 60 s, bpftrace gets TERM, runs END and kills the child. If a process remains
-after the run, record its PID and stop.
+`Child terminated by signal: N`. At 60 s, bpftrace gets TERM, runs END and kills the child. If `T-after.txt`
+is not two zeros, record the remaining PID and stop.
 
 ## Read the result
 
