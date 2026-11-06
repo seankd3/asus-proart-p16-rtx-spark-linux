@@ -1,17 +1,23 @@
 {
   "kernel": {
     "repository": "https://github.com/omacom/omarchy-pkgs",
-    "commit": "9db7ac36d410aca6d571975be1a5a77677918569",
-    "path": "pkgbuilds/linux-omarchy-aarch64",
-    "version": "7.2.8-23"
+    "commit": "b4e7d40dd9aec8173dbd532479b56f585e6ebba3",
+    "path": "pkgbuilds/linux-omarchy-aarch64"
+  },
+  "p16_platform": {
+    "pull_request": "https://github.com/omacom/omarchy-pkgs/pull/1958",
+    "commit": "f9a172dad09e5cd171039debf4d4aa281c880ab6",
+    "patches": [
+      "9100-asus-arm64-wmi-p16.patch",
+      "9101-p16-virtual-gpio.patch",
+      "9103-asus-capability-aware-initialization.patch",
+      "9104-spi-hid-acpi-reset-handle.patch"
+    ]
   },
   "acpi": {
     "repository": "https://github.com/pfeifferj/archlinuxarm-proart-p16",
     "commit": "3484cc008a9ee00b34c086c729e28e935cbc3430"
   },
-  "spi_hid": "Included by Omarchy patches 2110-2120; see pinned kernel source",
-  "wmi_arm64": "https://lore.kernel.org/all/20260917021055.8029-2-chipang_kao@asus.com/",
-  "asus_arm64": "https://lore.kernel.org/all/20260922032157.120188-1-chipang_kao@asus.com/",
   "acpica": {
     "version": "20260408",
     "url": "https://github.com/acpica/acpica/releases/download/20260408/acpica-unix-20260408.tar.gz",

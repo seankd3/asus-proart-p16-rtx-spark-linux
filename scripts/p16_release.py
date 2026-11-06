@@ -1,9 +1,24 @@
-"""The P16 kernel release, read from its one source: pkgver and pkgrel in kernel/PKGBUILD."""
+"""The P16 kernel release, read from the recipe makepkg builds: pkgver and pkgrel in build/kernel/PKGBUILD.
+
+scripts/build-kernel.sh assembles that recipe. Shell scripts read the release with --shell.
+"""
 from pathlib import Path
 import re
+import shlex
+import sys
 
-_PKGBUILD = (Path(__file__).resolve().parents[1] / 'kernel/PKGBUILD').read_text()
+RECIPE = Path(__file__).resolve().parents[1] / 'build/kernel'
+_PKGBUILD = (RECIPE / 'PKGBUILD').read_text()
 PKGVER, PKGREL = (re.search(rf'^{name}=(\S+)$', _PKGBUILD, re.M)[1] for name in ('pkgver', 'pkgrel'))
 PACKAGE = 'linux-p16-asus-' + PKGREL
-RELEASE = f'{PKGVER}-{PKGREL}-omarchy-p16-asus'
+# The kernel names version x.y as x.y.0.
+RELEASE = '.'.join((PKGVER.split('.') + ['0'])[:3]) + f'-{PKGREL}-omarchy-p16-asus'
 IMAGE = f'/EFI/Linux/omarchy_{PACKAGE}.efi'
+PACKAGES = [RECIPE / f'{PACKAGE}{part}-{PKGVER}-{PKGREL}-aarch64.pkg.tar.zst' for part in ('', '-headers')]
+
+if __name__ == '__main__':
+    if sys.argv[1:] != ['--shell']:
+        sys.exit('Usage: p16_release.py --shell')
+    for name in ('PACKAGE', 'RELEASE', 'IMAGE'):
+        print(f'{name}={shlex.quote(globals()[name])}')
+    print('PACKAGES=(' + ' '.join(shlex.quote(str(p)) for p in PACKAGES) + ')')

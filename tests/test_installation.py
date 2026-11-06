@@ -5,7 +5,9 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import runpy
+import shlex
 import shutil
 import struct
 import subprocess
@@ -15,7 +17,17 @@ import unittest
 from unittest.mock import patch
 
 REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO / 'scripts'))
+# The scripts read the release from the assembled recipe. The reader runs here
+# from a temporary repository root that holds a small one.
+_ROOT = tempfile.TemporaryDirectory()
+ROOT = Path(_ROOT.name)
+(ROOT / 'scripts').mkdir()
+for _name in ('common.sh', 'p16_release.py'):
+    shutil.copy2(REPO / 'scripts' / _name, ROOT / 'scripts' / _name)
+(ROOT / 'build/kernel').mkdir(parents=True)
+(ROOT / 'build/kernel/PKGBUILD').write_text('pkgver=7.3\npkgrel=26\n')
+sys.path.insert(0, str(ROOT / 'scripts'))
+import p16_release as release  # noqa: E402
 from p16_release import IMAGE  # noqa: E402
 
 P16_EFI = Path(IMAGE).name
@@ -179,7 +191,7 @@ class BackupTests(unittest.TestCase):
         python = commands/'python3'
         python.write_text('#!/usr/bin/python3\n'
                           'import importlib.util, os, pathlib, sys\n'
-                          'sys.path.insert(0, os.path.dirname(os.environ["TEST_STATE_MODULE"]))\n'
+                          'sys.path.insert(0, os.environ["TEST_RELEASE_DIR"])\n'
                           'spec=importlib.util.spec_from_file_location("state", os.environ["TEST_STATE_MODULE"])\n'
                           'm=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\n'
                           'm.restore(pathlib.Path(sys.argv[3]), pathlib.Path(os.environ["TEST_ROOT"]), status="failed")\n')
@@ -193,7 +205,7 @@ class BackupTests(unittest.TestCase):
         handler=source[source.index('finish() {'):source.index('if [[ -n $resume_backup ]]; then')]
         env=dict(os.environ, backup=str(self.backup), hooks='',
                  PATH=str(commands)+':'+os.environ['PATH'], TEST_ROOT=str(self.root),
-                 TEST_STATE_MODULE=str(REPO/'scripts/install_state.py'))
+                 TEST_STATE_MODULE=str(REPO/'scripts/install_state.py'), TEST_RELEASE_DIR=str(ROOT/'scripts'))
         script='source '+str(REPO/'scripts/common.sh')+'\n'+handler+'\nexit 7\n'
         process=subprocess.run(['bash', '-c', script], env=env, capture_output=True, text=True)
         self.assertEqual(process.returncode, 7, process.stderr)
@@ -270,6 +282,19 @@ class BackupTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'EFI-Image verändert'):
             state.verify_preserved(self.backup, self.root)
 
+    def test_preservation_requires_every_saved_menu_entry(self):
+        stock = '/+Omarchy\n//linux-p16-asus-24\n  protocol: efi\n  path: boot():/EFI/Linux/stock.efi#' + 'a' * 128 + '\n'
+        self.menu.write_text('default_entry: 2\n' + stock)
+        backup = self.base / 'menu-backup'
+        backup.mkdir()
+        state.begin(backup, self.packages, self.root)
+        added = '//linux-p16-asus-26\n  protocol: efi\n  path: boot():' + IMAGE + '#' + 'b' * 128 + '\n'
+        self.menu.write_text('timeout: 10\ndefault_entry: 2\n' + stock + added)
+        state.verify_preserved(backup, self.root)
+        self.menu.write_text('default_entry: 2\n/+Omarchy\n' + added)
+        with self.assertRaisesRegex(ValueError, 'linux-p16-asus-24'):
+            state.verify_preserved(backup, self.root)
+
 
 class ValidationTests(unittest.TestCase):
     def test_fresh_build_directory_has_compiling_users_owner(self):
@@ -279,8 +304,6 @@ class ValidationTests(unittest.TestCase):
             root = Path(tmp)
             (root/'scripts').mkdir()
             shutil.copy2(REPO/'scripts/common.sh', root/'scripts/common.sh')
-            (root/'kernel').mkdir()
-            shutil.copy2(REPO/'kernel/PKGBUILD', root/'kernel/PKGBUILD')
             env = dict(os.environ, SUDO_UID=str(os.getuid()), SUDO_GID=str(os.getgid()))
             subprocess.run(['bash', '-c', 'source "$1"; prepare_build_dir', 'bash', str(root/'scripts/common.sh')], env=env, check=True)
             build = root/'build'
@@ -346,7 +369,6 @@ source "$1"
 
 class CommandLineTests(unittest.TestCase):
     def test_fresh_install_preserves_encryption_and_adds_platform_options(self):
-        import shlex
         host = 'cryptdevice=UUID=example:root root=/dev/mapper/root rootflags=subvol=@ rw'
         result = cmdline.build(host)
         args = shlex.split(result)
@@ -357,19 +379,20 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(cmdline.build(result), result)
 
     def test_conflicts_and_recovery_flags_are_replaced(self):
-        import shlex
         args = shlex.split(cmdline.build(
             'root=/dev/mapper/root pci=nomsi mem_sleep_default=deep acpi=off '
+            'power_wrap_drv.usb4_release=0 '
             'module_blacklist=nvidia systemd.unit=emergency.target '
             'initcall_blacklist=other_init'))
         self.assertNotIn('pci=nomsi', args)
         self.assertNotIn('acpi=off', args)
         self.assertNotIn('systemd.unit=emergency.target', args)
         self.assertNotIn('module_blacklist=nvidia', args)
+        # Omarchy 1112 and 1113 make these the defaults; the new entry carries neither.
+        self.assertFalse([a for a in args if a.startswith(('mem_sleep_default=', 'power_wrap_drv.usb4_release='))])
         self.assertIn('initcall_blacklist=simpledrm_platform_driver_init,other_init', args)
 
     def test_limine_dropins_preserve_option_boundaries(self):
-        import shlex
         files = [REPO/'config'/name for name in (
             '00-omarchy-n1x-usb4.conf', '00-omarchy-n1x-gpu.conf',
             '00-omarchy-n1x-sleep.conf', 'limine-p16-keyboard.conf')]
@@ -405,31 +428,45 @@ class CommandLineTests(unittest.TestCase):
             cmdline.build('quiet splash')
 
 
+class ReleaseTests(unittest.TestCase):
+    SHELL = 'source "$1"; release=$(python3 "$REPO/scripts/p16_release.py" --shell); eval "$release"; '
+
+    def test_shell_reads_the_release_the_kernel_reports(self):
+        # pkgver 7.3 builds the kernel 7.3.0. A plain join gave 7.3-26, which no kernel reports.
+        self.assertEqual(release.RELEASE, '7.3.0-26-omarchy-p16-asus')
+        script = self.SHELL + 'printf "%s\\n" "$PACKAGE" "$RELEASE" "$IMAGE" "${PACKAGES[@]}"'
+        shell = subprocess.check_output(['bash', '-c', script, 'bash', str(ROOT/'scripts/common.sh')], text=True)
+        self.assertEqual(shell.splitlines(), [release.PACKAGE, release.RELEASE, release.IMAGE, *map(str, release.PACKAGES)])
+
+    def test_missing_recipe_stops_the_script(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            scripts = Path(tmp)/'scripts'
+            scripts.mkdir()
+            for name in ('common.sh', 'p16_release.py'):
+                shutil.copy2(REPO/'scripts'/name, scripts/name)
+            result = subprocess.run(['bash', '-c', self.SHELL + 'echo reached', 'bash', str(scripts/'common.sh')],
+                                    capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn('reached', result.stdout)
+        self.assertIn('FileNotFoundError', result.stderr)
+
+
 class KernelInputsTests(unittest.TestCase):
-    def test_kernel_inputs_are_complete_verified_and_have_no_orphan_patches(self):
-        script = r'''source PKGBUILD
-for ((i=0; i<${#source[@]}; i++)); do
-    printf '%s\t%s\t%s\n' "${source[i]}" "${sha256sums[i]}" "${b2sums[i]}"
-done
-for ((i=0; i<${#source_aarch64[@]}; i++)); do
-    printf '%s\t%s\t%s\n' "${source_aarch64[i]}" "${sha256sums_aarch64[i]}" "${b2sums_aarch64[i]}"
-done
-'''
+    def test_delta_patches_are_in_the_recipe_with_their_sums_and_none_is_orphaned(self):
         kernel = REPO / 'kernel'
-        records = subprocess.check_output(['bash', '-c', script], cwd=kernel, text=True)
-        local = set()
-        for line in records.splitlines():
-            name, sha256, blake2 = line.split('\t')
-            if '://' in name:
-                continue
-            local.add(name)
-            data = (kernel / name).read_bytes()
-            if sha256 != 'SKIP':
-                self.assertEqual(hashlib.sha256(data).hexdigest(), sha256, name)
-            if blake2 != 'SKIP':
-                self.assertEqual(hashlib.blake2b(data).hexdigest(), blake2, name)
-        bundled = {p.name for p in kernel.iterdir() if p.suffix in ('.patch', '.sig')}
-        self.assertEqual(bundled - local, set(), 'Unreferenced kernel patch/signature')
+        added = ''.join(line[1:] + '\n' for line in (kernel/'PKGBUILD.patch').read_text().splitlines()
+                        if line.startswith('+') and not line.startswith('+++'))
+        names, sha256, blake2 = (
+            shlex.split(re.search(rf'^{array}\+=\((.*?)^\)', added, re.M | re.S)[1])
+            for array in ('source', 'sha256sums', 'b2sums'))
+        self.assertEqual(len(names), len(sha256))
+        self.assertEqual(len(names), len(blake2))
+        for name, sha, b2 in zip(names, sha256, blake2):
+            data = (kernel/name).read_bytes()
+            self.assertEqual(hashlib.sha256(data).hexdigest(), sha, name)
+            self.assertEqual(hashlib.blake2b(data).hexdigest(), b2, name)
+        bundled = {p.name for p in kernel.iterdir()} - {'PKGBUILD.patch'}
+        self.assertEqual(bundled, set(names), 'Every delta file is a listed patch')
 
 
 if __name__ == '__main__':

@@ -6,9 +6,7 @@ import sys
 
 PLATFORM_OPTIONS = [
     'console=tty0', 'acpi=nospcr', 'acpi_osi=!Windows 2022',
-    'power_wrap_drv.usb4_release=0',
     'pci=hpbussize=0x80,hpmmiosize=32M,hpmmioprefsize=32G',
-    'mem_sleep_default=s2idle',
 ]
 
 

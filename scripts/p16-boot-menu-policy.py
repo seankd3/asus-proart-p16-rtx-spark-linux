@@ -12,6 +12,7 @@ VALID_DEFAULTS = {
     'Omarchy/linux-p16-asus-23',
     'Omarchy/linux-p16-asus-24',
     'Omarchy/linux-p16-asus-25',
+    'Omarchy/linux-p16-asus-26',
     'Omarchy/linux-p16-asus-23-npu2',
     'Omarchy/linux-rtx-spark-npu',
 }

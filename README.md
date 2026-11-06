@@ -31,7 +31,7 @@ origins and local adaptations in [Provenance and local additions](#provenance-an
 | CUDA | Toolkit installation, an `sm_121` GPU verification program, an exact cuBLAS GEMM diagnostic and NVIDIA container setup instructions |
 | Installation and recovery | Checked source inputs, a separate kernel/UKI, configuration and EFI backups, Limine hash verification and rollback tools |
 
-The kernel recipe and P16 patches are included here. The `spark_hwmon` source,
+The P16 kernel delta is included here; `scripts/build-kernel.sh` fetches the Omarchy recipe it applies to. The `spark_hwmon` source,
 installer and tests are fetched at an immutable commit by
 `scripts/prepare-spark-hwmon.sh`; `sources.json` records the upstream source pins.
 ACPI overrides are generated from the target machine's own firmware tables.
@@ -47,7 +47,7 @@ policy, see [Update-safe P16 installation](docs/update-safe.md).
 | Platform / GPU | **NVIDIA RTX Spark N1X**, AArch64, GPU `10de:2e03`, CUDA compute capability **12.1** |
 | Firmware | BIOS **H7607BA.300**, EC **2.16** |
 | Base installation | Official **Omarchy ARM64 Nightly** |
-| Patched kernel | Omarchy recipe **7.2.8-23** plus P16 patches, the CVE-2026-98432 fix and the i8042 key-filter gate, packaged as `linux-p16-asus-25` and producing **7.2.8-25-omarchy-p16-asus** |
+| Patched kernel | Omarchy recipe **7.3-20** plus the P16 delta, packaged as `linux-p16-asus-26` and producing **7.3.0-26-omarchy-p16-asus** |
 | Validated NVIDIA driver | **615.78.08**, open kernel modules |
 
 The install scripts check the laptop model and BIOS. The ACPI builder checks
@@ -153,16 +153,16 @@ Run as your regular user:
 ./scripts/build-kernel.sh
 ```
 
-The first run downloads the Linux source. Signature verification remains enabled, using an isolated GPG directory under `build/gnupg/`. Allow several tens of GB of free disk space. The build produces:
+The script fetches `pkgbuilds/linux-omarchy-aarch64` at the omarchy-pkgs commit in `sources.json` into `build/kernel/`, copies the patches from `kernel/` beside it and applies `kernel/PKGBUILD.patch` with `--fuzz=0`. Then it runs `makepkg` there. Arguments go to `makepkg`, so `./scripts/build-kernel.sh --nobuild` only verifies the sources and applies the patches. The first run downloads the Linux source to `build/sources/`. Signature verification remains enabled, using an isolated GPG directory under `build/gnupg/`. Allow 60 GB of free disk space. The build produces:
 
 ```text
-kernel/linux-p16-asus-25-7.2.8-25-aarch64.pkg.tar.zst
-kernel/linux-p16-asus-25-headers-7.2.8-25-aarch64.pkg.tar.zst
+build/kernel/linux-p16-asus-26-7.3-26-aarch64.pkg.tar.zst
+build/kernel/linux-p16-asus-26-headers-7.3-26-aarch64.pkg.tar.zst
 ```
 
 NVIDIA-DKMS requires the headers package. Pacman owns the installed kernel and modules; the installed headers allow DKMS builds after the source build directory has been removed.
 
-`kernel/PKGBUILD` specifies the patch order and SHA-256/BLAKE2 checksums. Omarchy already includes the SPI-HID transport series; the remaining P16 patches add the ACPI IRQ retry, virtual GPIOs, thermal filtering and ACPI allocation fix. The combined ASUS patch already includes ARM64 WMI support, relocation to `drivers/platform/asus/` and the P16 RSOC fix. Apply it once as part of the recipe.
+`kernel/PKGBUILD.patch` holds the whole P16 change to the Omarchy recipe: the package name and `pkgrel`, the release suffix, the config lines, no NVIDIA package, and the six patches with their SHA-256 and BLAKE2 checksums. Four patches are unchanged copies of [omarchy-pkgs#1958](https://github.com/omacom/omarchy-pkgs/pull/1958) at `f9a172da`: ASUS WMI on ARM64 with the P16 RSOC read and charge limit (`9100`), the MT8901 EINT-only pins (`9101`), the i8042 and fan-curve gates (`9103`) and the SPI-HID `_RST` call (`9104`). `p16-thermal.patch` keeps PSYS and PSOC out of the thermal zones, and `arm64-acpi-allocation.patch` keeps the initrd ACPI overrides inside one EFI descriptor. The scripts read the release from `build/kernel/PKGBUILD`, so they need an assembled recipe. A change to the pin or to `kernel/` takes a new `pkgrel`.
 
 ## 5. Install the kernel and system configuration
 
@@ -219,7 +219,7 @@ python3 scripts/peripherals.py check-installed
 
 This checks file contents, not touchpad gestures or audible speaker output.
 
-Each release is its own package, named after `pkgrel` in `kernel/PKGBUILD` (now `linux-p16-asus-25`), so earlier P16 kernels such as `linux-p16-asus-24` stay installed. Keep the old kernel and boot entry until the new kernel has booted successfully. The ACPI hook and ASUS services continue to support the older P16 kernels.
+Each release is its own package, named after `pkgrel` in `kernel/PKGBUILD.patch` (now `linux-p16-asus-26`), so earlier P16 kernels such as `linux-p16-asus-24` stay installed. Keep the old kernel and boot entry until the new kernel has booted successfully. The ACPI hook and ASUS services continue to support the older P16 kernels.
 
 From the installed Omarchy system:
 
@@ -237,15 +237,16 @@ The installer:
 - preserves the target machine's root/LUKS parameters and adds the validated P16 boot parameters;
 - installs NVIDIA DRM modesetting/fbdev configuration and blocks the conflicting legacy `nvidiafb` driver;
 - builds an additional unified kernel image (UKI) and verifies its kernel, ACPI tables and required modules;
-- registers `linux-p16-asus-25` with Limine and verifies EFI BLAKE2b hashes;
-- displays the boot menu for ten seconds while preserving the existing default entry.
+- registers `linux-p16-asus-26` with Limine and verifies EFI BLAKE2b hashes;
+- displays the boot menu for ten seconds while preserving the existing default entry and every existing entry.
 
-The generated P16 UKI explicitly includes `power_wrap_drv.usb4_release=0`,
-`pci=hpbussize=0x80,hpmmiosize=32M,hpmmioprefsize=32G`,
-`mem_sleep_default=s2idle` and
+The generated P16 UKI explicitly includes
+`pci=hpbussize=0x80,hpmmiosize=32M,hpmmioprefsize=32G` and
 `initcall_blacklist=simpledrm_platform_driver_init`, in addition to the console
-and ACPI options above. These retain USB4 resources, reserve PCI hotplug space,
-select suspend-to-idle and avoid the conflicting SimpleDRM initialization.
+and ACPI options above. These reserve PCI hotplug space and avoid the
+conflicting SimpleDRM initialization. Omarchy's patches 1112 and 1113 keep the
+USB4 resources and select suspend-to-idle by default, so the P16 UKI drops
+`power_wrap_drv.usb4_release=` and `mem_sleep_default=` from the host command line.
 The corresponding Limine drop-ins preserve these options during later UKI
 rebuilds. They apply to the normal default command line; keep Omarchy's separate
 fallback command line for recovery. Existing `pci=` settings are replaced with
@@ -268,7 +269,7 @@ sudo ./scripts/install-kernel.sh --resume /root/p16-install.XXXXXXXX
 
 Replace `XXXXXXXX` with the actual backup suffix printed when installation started. Resume validates the root-owned checkpoint, all backup files and both package checksums. It restores the original boot files before repeating installation. This also supports recovery from an interruption that prevented automatic restoration. A successfully completed installation cannot be resumed. Checkpoints created before the NVIDIA/platform or peripheral configuration additions can still be restored, but must be resumed using their original installer revision. A manually restored checkpoint can be resumed with the same package files while the boot environment still matches.
 
-Reboot and select **`linux-p16-asus-25`** in the Limine menu. Then check:
+Reboot and select **`linux-p16-asus-26`** in the Limine menu. Then check:
 
 ```bash
 uname -r
@@ -276,7 +277,7 @@ uname -r
 sudo python3 scripts/verify-boot.py
 ```
 
-`uname -r` must report `7.2.8-25-omarchy-p16-asus`. Battery readings should be plausible, `nvidia-smi` should list the GPU, and the three services should have started successfully. `powerprofilesctl list` should report `nvidia_rtx_spark` and `platform_profile` as drivers.
+`uname -r` must report `7.3.0-26-omarchy-p16-asus`. Battery readings should be plausible, `nvidia-smi` should list the GPU, and the three services should have started successfully. `powerprofilesctl list` should report `nvidia_rtx_spark` and `platform_profile` as drivers.
 
 ## 6. Configure a German keyboard layout
 
@@ -303,7 +304,7 @@ powerprofilesctl set power-saver
 
 Balanced maps to ASUS Balanced, Performance to ASUS Performance, and Power Saver to ASUS Quiet. The daemon also controls the NVIDIA CPU backend.
 
-`p16-asus-controls.service` loads the ASUS driver before power profile discovery. `p16-charge-limit.service` sets the charge limit to **80%** after battery registration. Both services are restricted to the validated ASUS P16 kernel releases (`7.2.8-14`, `7.2.8-23`, `7.2.8-24` and `7.2.8-25`). The factory fan curves remain active.
+`p16-asus-controls.service` loads the ASUS driver before power profile discovery. `p16-charge-limit.service` sets the charge limit to **80%** after battery registration. Both services are restricted to the validated ASUS P16 kernel releases (`7.2.8-14`, `7.2.8-23`, `7.2.8-24`, `7.2.8-25` and `7.3.0-26`). The factory fan curves remain active.
 
 At the critical battery level, UPower powers the laptop off (`/etc/UPower/UPower.conf.d/50-p16-critical.conf`). The kernel has no hibernation, and suspend-to-idle still drains the battery, so a suspend at that level can run it flat. The installer restarts UPower and requires `GetCriticalAction` to report `PowerOff`.
 
@@ -319,7 +320,7 @@ The monitor reads ACPI, NVIDIA, NVMe, Wi-Fi and fan interfaces. The kernel exclu
 
 ### RTX Spark power and temperature telemetry
 
-After rebooting successfully into `7.2.8-25-omarchy-p16-asus`, install the
+After rebooting successfully into `7.3.0-26-omarchy-p16-asus`, install the
 validated `spark_hwmon` backend. Its complete source and tests are fetched from
 the immutable commit in `sources.json`, version **0.3.0.rtxspark.5**:
 
@@ -410,8 +411,8 @@ After an NVIDIA package update, ensure DKMS builds successfully for the P16 kern
 
 ```bash
 dkms status
-sudo dkms autoinstall -k 7.2.8-25-omarchy-p16-asus
-sudo depmod -a 7.2.8-25-omarchy-p16-asus
+sudo dkms autoinstall -k 7.3.0-26-omarchy-p16-asus
+sudo depmod -a 7.3.0-26-omarchy-p16-asus
 ```
 
 Then rebuild the UKI through Omarchy's `limine-mkinitcpio` workflow and run `sudo python3 scripts/verify-boot.py` so the initramfs and root filesystem contain matching drivers. Preserve the stock kernel and its fallback entry when changing kernels.
@@ -475,17 +476,17 @@ and applying calibration. The full 44-test suite passed normally and with
 Python assertions disabled. This did not include a fresh OS installation,
 an audible playback test or a physical test of the DRM candidate.
 
-The surrounding kernel recipe and many device patches come from Omarchy and
-their credited upstream authors. Our P16-specific additions and integration
-include ASUS RSOC handling, the virtual-GPIO/IRQ and thermal corrections,
-Limine installation/recovery, and the separately pinned `spark_hwmon` N1X
+The kernel recipe and many device patches come from Omarchy and their
+credited upstream authors. The ASUS WMI, MT8901 pin and SPI-HID reset patches
+come from omarchy-pkgs#1958. Our P16-specific additions and integration
+include the thermal correction, Limine installation/recovery, and the separately pinned `spark_hwmon` N1X
 backend. Original source notices are retained; see [sources.json](sources.json)
 and [LICENSES.md](LICENSES.md) for provenance and licenses.
 
 ## Repository layout and sources
 
 ```text
-kernel/       complete Omarchy kernel recipe, configuration, signatures and P16 patches
+kernel/       the P16 delta: PKGBUILD.patch and six kernel patches
 acpi/         ACPI builder, transformations, ACPICA source archive and MIT license
 config/       mkinitcpio/Limine configuration and systemd services
 scripts/      build, installation, keyboard, temperature and verification tools
@@ -498,18 +499,13 @@ build/        local downloads and build outputs; excluded from Git
 
 - [Omarchy ARM64/N1X installation](https://github.com/omacom/omarchy-iso/blob/quattro/N1X.md)
 - [Nightly build and ARM64 publication](https://github.com/omacom/omarchy-iso/blob/quattro/.github/workflows/nightly-build.yml)
-- [Omarchy kernel recipe](https://github.com/omacom/omarchy-pkgs/tree/9db7ac36d410aca6d571975be1a5a77677918569/pkgbuilds/linux-omarchy-aarch64)
+- [Omarchy kernel recipe](https://github.com/omacom/omarchy-pkgs/tree/b4e7d40dd9aec8173dbd532479b56f585e6ebba3/pkgbuilds/linux-omarchy-aarch64)
+- [ProArt P16 ASUS platform patches, omarchy-pkgs#1958](https://github.com/omacom/omarchy-pkgs/pull/1958)
 - [Josephine Pfeiffer's Arch Linux ARM ProArt P16 repository — ACPI, touchpad, speaker-firmware metadata and DRM candidate](https://github.com/pfeifferj/archlinuxarm-proart-p16/tree/3484cc008a9ee00b34c086c729e28e935cbc3430) (see [component provenance](#provenance-and-local-additions))
 - [SPI-HID v5](https://lore.kernel.org/all/20261009-send-upstream-v5-0-384af01da3ee@chromium.org/)
 
-The large `kernel/` file count comes from the pinned Omarchy recipe: its local
-source inputs include patches, detached signatures and the ARM64 configuration.
-Every bundled patch/signature is referenced by `PKGBUILD`; the three public
-keys verify upstream signatures. The inherited recipe also carries patches for
-other architectures. They are retained to reproduce the validated kernel base,
-rather than selectively changing it for this laptop. Local kernel source trees,
-packages and other build outputs are ignored by Git. Generated `.SRCINFO`
-metadata is not stored; it can be recreated with `makepkg --printsrcinfo`.
+`build/` holds the fetched recipe, the downloads, the kernel source tree and the packages. Git ignores it. Generated `.SRCINFO`
+metadata is not stored; it can be recreated with `makepkg --printsrcinfo` in `build/kernel/`.
 
 Verify repository checksums with `sha256sum -c SHA256SUMS`. See [LICENSES.md](LICENSES.md) for licensing.
 
