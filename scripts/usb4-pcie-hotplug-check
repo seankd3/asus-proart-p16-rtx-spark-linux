@@ -16,6 +16,7 @@ import time
 PCI = Path('/sys/bus/pci/devices')
 CHILD = re.compile(r'[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]')
 WAIT = 120
+NVME_CLASS = '0x010802'
 
 
 def read(path):
@@ -30,6 +31,12 @@ def tunnel_ports():
 def children(port):
     """Every PCI function below the port, at any depth."""
     return sorted(d for d in port.resolve().rglob('*') if CHILD.fullmatch(d.name) and (d / 'vendor').exists())
+
+
+def disks(function):
+    """Block devices of an NVMe PCI function. A multipath namespace shows as nvmeXcYnZ; its disk is nvmeXnZ."""
+    names = {re.sub(r'c\d+n', 'n', n.name) for n in function.glob('nvme/nvme*/nvme*n*')}
+    return [f'/dev/{n}' for n in sorted(names) if Path('/dev', n).is_block_device()]
 
 
 def state(port):
@@ -77,20 +84,16 @@ def main():
             failures.append(f'{port.name} is {power} while connected')
         if usage < 1:
             failures.append(f'{port.name} has no runtime PM reference while connected')
-        below = {d.name for d in children(port)}
-        for controller in sorted(Path('/sys/class/nvme').glob('nvme*')):
-            if controller.joinpath('device').resolve().name not in below:
-                continue
-            # A multipath namespace shows here as nvmeXcYnZ; its disk is nvmeXnZ.
-            disks = sorted({re.sub(r'c\d+n', 'n', n.name) for n in controller.glob('nvme*n*')})
-            device = controller.joinpath('device').resolve()
-            speed = f"{read(device / 'current_link_speed')} x{read(device / 'current_link_width')}"
-            print(f'  NVMe {controller.name}: {", ".join("/dev/" + d for d in disks) or "no namespace"}, PCIe {speed}')
-            if not any(Path('/dev', d).is_block_device() for d in disks):
-                failures.append(f'{controller.name} has no block device')
+        for function in (d for d in children(port) if read(d / 'class') == NVME_CLASS):
+            speed = f"{read(function / 'current_link_speed')} x{read(function / 'current_link_width')}"
+            found = wait_for(lambda: disks(function), f'block device for NVMe {function.name}')
+            print(f'  NVMe {function.name}: {", ".join(found or ["no block device"])}, PCIe {speed}')
+            if not found:
+                failures.append(f'NVMe {function.name} has no block device')
 
         input('\nDisconnect the device, then press Enter. ')
-        gone = wait_for(lambda: not children(port) and state(port)[0] == 'D3cold' and port, 'D3cold after disconnect')
+        gone = wait_for(lambda: not children(port) and state(port) == ('D3cold', 0) and port,
+                        'D3cold without a runtime PM reference after disconnect')
         print('After disconnect:')
         show(port)
         if gone is None:
