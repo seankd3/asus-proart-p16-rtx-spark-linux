@@ -3,8 +3,8 @@
 
 Run with nothing connected to USB4, connect the device when asked, then
 disconnect it when asked. PASS needs, while connected: PCIe devices below a
-10de:22cf tunnel root port, that port in D0 with a runtime PM reference, and a
-block device for each NVMe controller behind it. After disconnect: the port
+10de:22cf tunnel root port, that port in D0 with a runtime PM reference, and at
+least one NVMe controller behind it, each with a block device. After disconnect: the port
 back in D3cold with no reference. Read-only; root is not needed.
 """
 from pathlib import Path
@@ -68,7 +68,7 @@ def main():
     if any(children(p) for p in ports):
         sys.exit('Disconnect every USB4 PCIe device, then run this again.')
 
-    input('\nConnect the USB4 dock or NVMe enclosure, then press Enter. ')
+    input('\nConnect the USB4 NVMe enclosure, or a dock with an NVMe drive, then press Enter. ')
     port = wait_for(lambda: next((p for p in ports if children(p)), None), 'PCIe device below a tunnel root port')
     failures = []
     if port is None:
@@ -84,7 +84,10 @@ def main():
             failures.append(f'{port.name} is {power} while connected')
         if usage < 1:
             failures.append(f'{port.name} has no runtime PM reference while connected')
-        for function in (d for d in children(port) if read(d / 'class') == NVME_CLASS):
+        nvme = [d for d in children(port) if read(d / 'class') == NVME_CLASS]
+        if not nvme:
+            failures.append(f'no NVMe controller below {port.name}')
+        for function in nvme:
             speed = f"{read(function / 'current_link_speed')} x{read(function / 'current_link_width')}"
             found = wait_for(lambda: disks(function), f'block device for NVMe {function.name}')
             print(f'  NVMe {function.name}: {", ".join(found or ["no block device"])}, PCIe {speed}')
