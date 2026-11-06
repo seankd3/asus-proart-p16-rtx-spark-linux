@@ -4,6 +4,7 @@ Operation = Upgrade
 Type = Package
 Target = linux-omarchy
 Target = linux-p16-asus-23
+Target = linux-p16-asus-24
 Target = linux-p16-asus-23-npu2
 Target = linux-rtx-spark-npu
 Target = limine

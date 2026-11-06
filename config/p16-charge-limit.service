@@ -1,9 +1,10 @@
 [Unit]
-Description=Apply P16 battery charge limit (100 percent)
+Description=Apply P16 battery charge limit (80 percent)
 After=systemd-udev-trigger.service p16-asus-controls.service
 Wants=p16-asus-controls.service
 ConditionKernelVersion=|7.2.8-14-omarchy-p16-asus
 ConditionKernelVersion=|7.2.8-23-omarchy-p16-asus
+ConditionKernelVersion=|7.2.8-24-omarchy-p16-asus
 ConditionKernelVersion=|7.2.8-23-omarchy-p16-asus-npu2
 ConditionKernelVersion=|7.2.8-23-rtx-spark-npu
 

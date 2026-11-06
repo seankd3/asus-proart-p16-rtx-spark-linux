@@ -2,10 +2,10 @@
 # Adopted from the Arch Linux linux package.
 
 # Versioned P16 package: preserve earlier working kernels alongside this build.
-pkgbase=linux-p16-asus-23
-_kernel=linux-p16-asus-23
+pkgbase=linux-p16-asus-24
+_kernel=linux-p16-asus-24
 pkgver=7.2.8
-pkgrel=23
+pkgrel=24
 pkgdesc='Omarchy kernel for ASUS ProArt P16 H7607BA.300 (N1X, ACPI, SPI HID, ASUS WMI)'
 url='https://omarchy.org'
 arch=(
@@ -1248,6 +1248,7 @@ source+=(
   p16-virtual-gpio.patch
   spi-acpi-irq-retry.patch
   asus-arm64-combined.patch
+  ipv4-free-inet_opt-ireq_opt-after-rcu.patch
 )
 sha256sums+=(
   '0ababbaed19c7108e8564916fac1b8fecc44010e7f3e4b419c34d01c66049e19'
@@ -1255,6 +1256,7 @@ sha256sums+=(
   '0e20e5854cb0613e154f18cb8ddbae52a3ae614915815ea2872dd7db6dc97018'
   '6e94e341bcd221dbfec7432c12a7668b6da9eac34a1f3ba7e3d337657baa8d79'
   '1c5a9f3ce03931bc50dcb7c4580f57c2b3fcc8a87ce92a226a174f8bf3e6755a'
+  '3f6a2afd7b321d618a06e18b6fc0bd6c911d5b40547d22b6fa109c0077dfc5ff'
 )
 b2sums+=(
   '693cd18dfde6d3a831bd7a47d0ee64dcbd206bb9bf99832365c653839f6b4116cc086f5596c53b74eb07210cf0f74ffd496a7157681cc50421e8fdcc2fc9ae98'
@@ -1262,6 +1264,7 @@ b2sums+=(
   '54d04dd82919f90b5645da972f928eef016ecba2ff7c3cb61968f1687d4f796093756cc040d5e4254270e1a4a49a774d76c71caeff978e1875baf36f748b90ab'
   'da3f0ce31b953b4b6a5162423d06a692d81349457533cf5ac8758a00aa5f305526ba567fb25a4ad28b10c631ce47b2b617753e6f207b63aaf5a1bd8bf1e10681'
   'e48b5c72e79d6302b2016223dcbcd43d107938f819f64075bb019667051bf36e828d3b76cae693f41a27f78094b60f4b71af6ae0e0588a0d57f8c87be32c4293'
+  '27cf2005deec3f7314420bb6fe93718e05315aa932204e2ce28a8a86b5ee6eba2fc96b9597d9b672a5eec6af3a482b8422d9fc9c5f20b51269d6679434e08213'
 )
 
 # https://www.kernel.org/pub/linux/kernel/v7.x/sha256sums.asc
