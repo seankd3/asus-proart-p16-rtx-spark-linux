@@ -47,7 +47,7 @@ policy, see [Update-safe P16 installation](docs/update-safe.md).
 | Platform / GPU | **NVIDIA RTX Spark N1X**, AArch64, GPU `10de:2e03`, CUDA compute capability **12.1** |
 | Firmware | BIOS **H7607BA.300**, EC **2.16** |
 | Base installation | Official **Omarchy ARM64 Nightly** |
-| Patched kernel | Omarchy recipe **7.2.8-23** plus P16 patches and the CVE-2026-98432 fix, packaged as `linux-p16-asus-24` and producing **7.2.8-24-omarchy-p16-asus** |
+| Patched kernel | Omarchy recipe **7.2.8-23** plus P16 patches, the CVE-2026-98432 fix and the i8042 key-filter gate, packaged as `linux-p16-asus-25` and producing **7.2.8-25-omarchy-p16-asus** |
 | Validated NVIDIA driver | **615.78.08**, open kernel modules |
 
 The install scripts check the laptop model and BIOS. The ACPI builder checks
@@ -156,8 +156,8 @@ Run as your regular user:
 The first run downloads the Linux source. Signature verification remains enabled, using an isolated GPG directory under `build/gnupg/`. Allow several tens of GB of free disk space. The build produces:
 
 ```text
-kernel/linux-p16-asus-24-7.2.8-24-aarch64.pkg.tar.zst
-kernel/linux-p16-asus-24-headers-7.2.8-24-aarch64.pkg.tar.zst
+kernel/linux-p16-asus-25-7.2.8-25-aarch64.pkg.tar.zst
+kernel/linux-p16-asus-25-headers-7.2.8-25-aarch64.pkg.tar.zst
 ```
 
 NVIDIA-DKMS requires the headers package. Pacman owns the installed kernel and modules; the installed headers allow DKMS builds after the source build directory has been removed.
@@ -219,7 +219,7 @@ python3 scripts/peripherals.py check-installed
 
 This checks file contents, not touchpad gestures or audible speaker output.
 
-Each release is its own package, named after `pkgrel` in `kernel/PKGBUILD` (now `linux-p16-asus-24`), so earlier P16 kernels such as `linux-p16-asus-23` stay installed. Keep the old kernel and boot entry until the new kernel has booted successfully. The ACPI hook and ASUS services continue to support the older P16 kernels.
+Each release is its own package, named after `pkgrel` in `kernel/PKGBUILD` (now `linux-p16-asus-25`), so earlier P16 kernels such as `linux-p16-asus-24` stay installed. Keep the old kernel and boot entry until the new kernel has booted successfully. The ACPI hook and ASUS services continue to support the older P16 kernels.
 
 From the installed Omarchy system:
 
@@ -237,7 +237,7 @@ The installer:
 - preserves the target machine's root/LUKS parameters and adds the validated P16 boot parameters;
 - installs NVIDIA DRM modesetting/fbdev configuration and blocks the conflicting legacy `nvidiafb` driver;
 - builds an additional unified kernel image (UKI) and verifies its kernel, ACPI tables and required modules;
-- registers `linux-p16-asus-24` with Limine and verifies EFI BLAKE2b hashes;
+- registers `linux-p16-asus-25` with Limine and verifies EFI BLAKE2b hashes;
 - displays the boot menu for ten seconds while preserving the existing default entry.
 
 The generated P16 UKI explicitly includes `power_wrap_drv.usb4_release=0`,
@@ -268,7 +268,7 @@ sudo ./scripts/install-kernel.sh --resume /root/p16-install.XXXXXXXX
 
 Replace `XXXXXXXX` with the actual backup suffix printed when installation started. Resume validates the root-owned checkpoint, all backup files and both package checksums. It restores the original boot files before repeating installation. This also supports recovery from an interruption that prevented automatic restoration. A successfully completed installation cannot be resumed. Checkpoints created before the NVIDIA/platform or peripheral configuration additions can still be restored, but must be resumed using their original installer revision. A manually restored checkpoint can be resumed with the same package files while the boot environment still matches.
 
-Reboot and select **`linux-p16-asus-24`** in the Limine menu. Then check:
+Reboot and select **`linux-p16-asus-25`** in the Limine menu. Then check:
 
 ```bash
 uname -r
@@ -276,7 +276,7 @@ uname -r
 sudo python3 scripts/verify-boot.py
 ```
 
-`uname -r` must report `7.2.8-24-omarchy-p16-asus`. Battery readings should be plausible, `nvidia-smi` should list the GPU, and the three services should have started successfully. `powerprofilesctl list` should report `nvidia_rtx_spark` and `platform_profile` as drivers.
+`uname -r` must report `7.2.8-25-omarchy-p16-asus`. Battery readings should be plausible, `nvidia-smi` should list the GPU, and the three services should have started successfully. `powerprofilesctl list` should report `nvidia_rtx_spark` and `platform_profile` as drivers.
 
 ## 6. Configure a German keyboard layout
 
@@ -303,7 +303,7 @@ powerprofilesctl set power-saver
 
 Balanced maps to ASUS Balanced, Performance to ASUS Performance, and Power Saver to ASUS Quiet. The daemon also controls the NVIDIA CPU backend.
 
-`p16-asus-controls.service` loads the ASUS driver before power profile discovery. `p16-charge-limit.service` sets the charge limit to **80%** after battery registration. Both services are restricted to the validated ASUS P16 kernel releases (`7.2.8-14`, `7.2.8-23` and `7.2.8-24`). The factory fan curves remain active.
+`p16-asus-controls.service` loads the ASUS driver before power profile discovery. `p16-charge-limit.service` sets the charge limit to **80%** after battery registration. Both services are restricted to the validated ASUS P16 kernel releases (`7.2.8-14`, `7.2.8-23`, `7.2.8-24` and `7.2.8-25`). The factory fan curves remain active.
 
 At the critical battery level, UPower powers the laptop off (`/etc/UPower/UPower.conf.d/50-p16-critical.conf`). The kernel has no hibernation, and suspend-to-idle still drains the battery, so a suspend at that level can run it flat. The installer restarts UPower and requires `GetCriticalAction` to report `PowerOff`.
 
@@ -319,7 +319,7 @@ The monitor reads ACPI, NVIDIA, NVMe, Wi-Fi and fan interfaces. The kernel exclu
 
 ### RTX Spark power and temperature telemetry
 
-After rebooting successfully into `7.2.8-24-omarchy-p16-asus`, install the
+After rebooting successfully into `7.2.8-25-omarchy-p16-asus`, install the
 validated `spark_hwmon` backend. Its complete source and tests are fetched from
 the immutable commit in `sources.json`, version **0.3.0.rtxspark.5**:
 
@@ -410,8 +410,8 @@ After an NVIDIA package update, ensure DKMS builds successfully for the P16 kern
 
 ```bash
 dkms status
-sudo dkms autoinstall -k 7.2.8-24-omarchy-p16-asus
-sudo depmod -a 7.2.8-24-omarchy-p16-asus
+sudo dkms autoinstall -k 7.2.8-25-omarchy-p16-asus
+sudo depmod -a 7.2.8-25-omarchy-p16-asus
 ```
 
 Then rebuild the UKI through Omarchy's `limine-mkinitcpio` workflow and run `sudo python3 scripts/verify-boot.py` so the initramfs and root filesystem contain matching drivers. Preserve the stock kernel and its fallback entry when changing kernels.
