@@ -19,6 +19,7 @@ FILES = {
     'config/p16-asus-controls.service': '/etc/systemd/system/p16-asus-controls.service',
     'config/p16-charge-limit.service': '/etc/systemd/system/p16-charge-limit.service',
     'config/20-p16-asus.conf': '/etc/systemd/system/power-profiles-daemon.service.d/20-p16-asus.conf',
+    'config/50-p16-critical.conf': '/etc/UPower/UPower.conf.d/50-p16-critical.conf',
 }
 
 
@@ -27,6 +28,11 @@ def main():
     for source, destination in FILES.items():
         if not Path(destination).is_file() or (ROOT / source).read_bytes() != Path(destination).read_bytes():
             issues.append(f'{destination} differs from P16 source')
+    critical = subprocess.run(['busctl', '--system', 'call', 'org.freedesktop.UPower',
+                               '/org/freedesktop/UPower', 'org.freedesktop.UPower',
+                               'GetCriticalAction'], text=True, capture_output=True)
+    if critical.stdout.strip() != 's "PowerOff"':
+        issues.append('running UPower critical action is not PowerOff')
     keyboard = Path('/etc/limine-entry-tool.d/zz-p16-keyboard.conf')
     if not keyboard.is_file() or 'acpi_osi=' not in keyboard.read_text():
         issues.append('P16 keyboard ACPI option missing')

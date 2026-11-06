@@ -369,6 +369,17 @@ class CommandLineTests(unittest.TestCase):
         for arg in cmdline.PLATFORM_OPTIONS[2:]:
             self.assertIn(arg, args)
 
+    def test_upower_dropin_parses_as_poweroff(self):
+        from gi.repository import GLib
+        path = REPO/'config/50-p16-critical.conf'
+        # UPower skips a drop-in whose name does not match its pattern.
+        self.assertRegex(path.name, r'^([0-9][0-9])-([a-zA-Z0-9-_])*\.conf$')
+        keyfile = GLib.KeyFile()
+        keyfile.load_from_file(str(path), GLib.KeyFileFlags.NONE)
+        self.assertEqual(keyfile.get_groups()[0], ['UPower'])
+        self.assertEqual(keyfile.get_keys('UPower')[0], ['CriticalPowerAction'])
+        self.assertEqual(keyfile.get_string('UPower', 'CriticalPowerAction'), 'PowerOff')
+
     def test_live_iso_is_rejected(self):
         with self.assertRaises(ValueError):
             cmdline.build('quiet splash')
