@@ -30,8 +30,10 @@ def build(text):
     for arg in args:
         if any(c in arg for c in ('"', '\n', '\r', '\x00')):
             raise ValueError('Invalid character in kernel command line.')
-    return ' '.join('acpi_osi="!Windows 2022"' if a == 'acpi_osi=!Windows 2022' else
-                    '"' + a + '"' if any(c.isspace() for c in a) else a for a in args) + '\n'
+    words = ('acpi_osi="!Windows 2022"' if a == 'acpi_osi=!Windows 2022' else
+             '"' + a + '"' if any(c.isspace() for c in a) else a for a in args)
+    # limine-entry-tool keeps the first of equal words in the menu entry; the UKI gets the same line.
+    return ' '.join(dict.fromkeys(words)) + '\n'
 
 
 if __name__ == '__main__':

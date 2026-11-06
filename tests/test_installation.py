@@ -75,6 +75,10 @@ class MenuTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'Befehlszeile des UKI'):
                     self.verify(self.entry(P16_EFI, line))
 
+    def test_p16_entry_is_found_by_its_path(self):
+        # A comment that names the P16 image does not make the stock entry the P16 entry.
+        self.verify('  # old: boot():' + IMAGE + '#' + '0' * 128 + '\n' + self.entry(P16_EFI))
+
     def test_missing_p16_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'P16-Eintrag fehlt'):
             self.verify('')
@@ -430,6 +434,12 @@ class CommandLineTests(unittest.TestCase):
         self.assertIn('acpi_osi="!Windows 2022"', result)
         # A kept argument keeps its exact value, spaces included.
         self.assertIn('"rootflags=subvol=system "', result)
+
+    def test_repeated_words_appear_once(self):
+        # limine-entry-tool drops repeated words from the menu entry; a UKI that kept them failed the menu check.
+        result = cmdline.build('root=/dev/mapper/root quiet quiet splash quiet').split()
+        self.assertEqual(result.count('quiet'), 1)
+        self.assertLess(result.index('quiet'), result.index('splash'))
 
     def test_live_iso_is_rejected(self):
         with self.assertRaises(ValueError):
