@@ -13,7 +13,7 @@ Boot the `@nv620` root with bpftrace 0.27.0 and no `nvidia-powerd` process. Set 
 ```bash
 (
   set -eu; umask 077
-  B=${REPO:?set REPO}/scripts/powerd620-nvpcf-branch.bt; [ -f "$B" ]
+  B=$(realpath -e "${REPO:?set REPO}/scripts/powerd620-nvpcf-branch.bt"); [ -f "$B" ]   # absolute before cd
   [ "$(findmnt -no FSROOT /)" = /@nv620 ]
   echo 'eb9e0371f73667f242e8d4742e17a21a68470e08cdc6438a84c263a4c3b6f4d2  /usr/bin/nvidia-powerd' | sha256sum -c --quiet
   [ "$(pgrep -xc nvidia-powerd)" = 0 ]
