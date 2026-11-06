@@ -1,0 +1,54 @@
+// Observe which NVPCF branch the unmodified nvidia-powerd 620 factory takes (binary sha256 eb9e0371...).
+// Read-only: probes only read registers and the caller's stack. Child-only: every probe filters pid == cpid.
+// Offsets: the R-E LOAD maps file offset 0 to VA 0, so these are file offsets. Each one is an instruction start
+// in pd620.dis. No PAC (no paciasp/autiasp in the binary), so uretprobe return hijack is the normal kind.
+
+BEGIN { printf("%llu BEGIN cpid=%d\n", nsecs, cpid); }
+
+// Coverage: factory create (vtable slot 0, reached by blr from 0x1105e0).
+uprobe:/usr/bin/nvidia-powerd:0x116620 /pid == cpid/ { printf("%llu %d factory_create_entry\n", nsecs, pid); }
+
+// Factory: MOBILE clear branch (unsupported-system path). Expected NOT hit (gpuFlags 0x1ed).
+uprobe:/usr/bin/nvidia-powerd:0x11677c /pid == cpid/ { printf("%llu %d factory_mobile_clear\n", nsecs, pid); }
+
+// 3x init entry. w0 = client handle from 0x6b160, w1 = info+4 (low 32 bits only are meaningful).
+uprobe:/usr/bin/nvidia-powerd:0x72c30 /pid == cpid/ {
+  printf("%llu %d nvpcf3x_init_entry w1=0x%x\n", nsecs, pid, arg1 & 0xffffffff);
+}
+
+// Right after `bl 0x1559b0` (3x query; result returned through x8 = sp+0x68). sp is unchanged since the
+// prologue at 0x72c34. Raw only: u64 at sp+0x68 and has_value byte at sp+0x70. Interpretation from code:
+// has_value != 0 → 0x72e18 uses the u64 as a value (stores it); has_value == 0 → low u32 is a status,
+// 0x56 → 0x732fc (return false), other → return false with an ERROR log.
+uprobe:/usr/bin/nvidia-powerd:0x72c5c /pid == cpid/ {
+  $sp = reg("sp");
+  printf("%llu %d nvpcf3x_query_raw u64=0x%llx has_value=%u\n", nsecs, pid,
+         *uptr((uint64 *)($sp + 0x68)), *uptr((uint8 *)($sp + 0x70)));
+}
+
+// In the wrapper 0x1521b0 (only caller 0x73678), after `ldr x0, [x0, #0x17f0]` and before `cbz x0`.
+// The wrapper returns 0 on both paths, so its return carries no information. x0 = 0: the call to 0x14dc70
+// is skipped. x0 != 0: the call path is taken. Neither shows an ongoing loop or a working controller.
+uprobe:/usr/bin/nvidia-powerd:0x1521bc /pid == cpid/ {
+  printf("%llu %d nvpcf3x_objprim_ptr x0=0x%llx\n", nsecs, pid, reg("r0"));
+}
+
+// 3x init return. The caller tests w0 & 0xff at 0x1166d0.
+uretprobe:/usr/bin/nvidia-powerd:0x72c30 /pid == cpid/ {
+  printf("%llu %d nvpcf3x_init_ret raw=0x%llx bool=%u\n", nsecs, pid, retval, retval & 0xff);
+}
+
+// Factory branch after 3x init: 0x116890 = TRUE (return without push); 0x1166d8 = FALSE (go to 2x/1x).
+uprobe:/usr/bin/nvidia-powerd:0x116890 /pid == cpid/ { printf("%llu %d factory_3x_true_branch\n", nsecs, pid); }
+uprobe:/usr/bin/nvidia-powerd:0x1166d8 /pid == cpid/ { printf("%llu %d factory_3x_false_branch\n", nsecs, pid); }
+
+// 2x/1x return (only on the FALSE branch). Caller 0x1166f4: bit 32 set and low u32 != 0 → push workers.
+uretprobe:/usr/bin/nvidia-powerd:0x71840 /pid == cpid/ {
+  printf("%llu %d nvpcf2x_ret raw=0x%llx\n", nsecs, pid, retval);
+}
+
+// Main: zero running workers (cbz at 0x5500c taken) and the quit routine (w0 = 2 from 0x551cc; 2 is also SIGINT).
+uprobe:/usr/bin/nvidia-powerd:0x55174 /pid == cpid/ { printf("%llu %d main_no_worker\n", nsecs, pid); }
+uprobe:/usr/bin/nvidia-powerd:0x6c6d0 /pid == cpid/ { printf("%llu %d quit_entry w0=0x%x\n", nsecs, pid, arg0 & 0xffffffff); }
+
+END { printf("%llu END\n", nsecs); }
