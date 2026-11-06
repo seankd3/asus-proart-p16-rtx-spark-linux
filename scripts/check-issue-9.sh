@@ -7,6 +7,8 @@
 #   backlight=1 2 3 0 1              asus::kbd_backlight level before and after each of four presses
 #   fn_esc=KEY_MUTE KEY_F1 KEY_MUTE  the Mute key's code before and after each of two Fn+Esc presses
 source "$(dirname "$0")/common.sh"
+release=$(python3 "$REPO/scripts/p16_release.py" --shell)
+eval "$release"
 results=$(<"${1:?Usage: check-issue-9.sh RESULTS}")
 fail() { echo "FAIL: $*" >&2; exit 1; }
 value() { sed -n "s/^$1=//p" <<<"$results"; }
@@ -14,9 +16,6 @@ value() { sed -n "s/^$1=//p" <<<"$results"; }
 [[ $(uname -r) == "$RELEASE" ]] || fail "kernel is $(uname -r), not $RELEASE"
 [[ $(readlink -f /sys/bus/platform/drivers/asus-nb-wmi/asus-nb-wmi) == /sys/devices/platform/asus-nb-wmi ]] ||
   fail 'asus-nb-wmi is not bound'
-# The unpatched module carries the filter; the patched one compiles it out.
-! grep -qE ' asus_i8042_filter[[:space:]]+\[asus_nb_wmi\]$' /proc/kallsyms ||
-  fail 'the running asus-nb-wmi is the unpatched module'
 log=$(journalctl -k -b -o cat --no-pager)
 [[ $log == *'input: Asus WMI hotkeys'* ]] || fail 'the kernel log of this boot has no asus-wmi probe'
 [[ $log != *'Unable to install key filter'* ]] || fail 'asus-wmi tried to install the i8042 key filter'

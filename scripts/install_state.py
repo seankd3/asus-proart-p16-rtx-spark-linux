@@ -5,10 +5,11 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 
-from p16_release import IMAGE, PACKAGE, RELEASE
+from p16_release import CMDLINE_DROPIN, IMAGE, PACKAGE, RELEASE
 
 TARGET = '/boot' + IMAGE
 CONFIG_PATHS = [
@@ -37,6 +38,7 @@ ADDED_CONFIG_PATHS = [
     '/etc/libinput/local-overrides.quirks',
     '/etc/mkinitcpio.conf.d/zz-p16-speakers.conf',
     '/etc/UPower/UPower.conf.d/50-p16-critical.conf',
+    CMDLINE_DROPIN,
     '/usr/lib/firmware/cirrus/cs35l56-b0-dsp1-misc-10431484-spkid0.wmfw',
     '/usr/lib/firmware/cirrus/cs35l56-b0-dsp1-misc-10431484-spkid0-l1u0.bin',
     '/usr/lib/firmware/cirrus/cs35l56-b0-dsp1-misc-10431484-spkid0-l1u1.bin',
@@ -149,6 +151,17 @@ def resume(backup, packages, root=Path('/')):
     save(backup, state)
 
 
+def menu_entries(menu):
+    """Each Limine entry: its /-line and the lines below it, up to the next /-line."""
+    entries = []
+    for line in menu.splitlines():
+        if line.lstrip().startswith('/'):
+            entries.append([line])
+        elif entries and line.strip():
+            entries[-1].append(line.rstrip())
+    return ['\n'.join(entry) for entry in entries]
+
+
 def verify_preserved(backup, root=Path('/')):
     state = load(backup)
     for name, info in state['files'].items():
@@ -157,9 +170,11 @@ def verify_preserved(backup, root=Path('/')):
             require(current.is_file() and digest(current) == info['digest'], 'Vorhandenes EFI-Image verändert: ' + name)
     old = (backup / 'files/boot/limine.conf').read_text()
     current = (root / 'boot/limine.conf').read_text()
-    import re
     require(re.findall(r'^default_entry:.*$', old, re.M) == re.findall(r'^default_entry:.*$', current, re.M),
             'Bootstandard wurde geändert')
+    kept = menu_entries(current)
+    lost = [entry.splitlines()[0].strip() for entry in menu_entries(old) if entry not in kept]
+    require(not lost, 'Vorhandene Booteinträge fehlen oder wurden verändert: ' + ', '.join(lost))
 
 
 def restore(backup, root=Path('/'), status='restored'):

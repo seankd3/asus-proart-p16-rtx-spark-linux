@@ -8,6 +8,7 @@ import struct
 import subprocess
 import tempfile
 from p16_release import IMAGE, PACKAGE, RELEASE
+from install_state import menu_entries
 PINS = {'DSDT.aml': '80e0ad4a051704003d09029cb600a9814e1cd370ce774b9749dc09d2232b5aaf', 'SSDT.aml': '9b28ffc14c19f8b7ea2278de88ff9ec070f5f70401107d81fef067a916aa9695'}
 
 def sections(path):
@@ -89,8 +90,10 @@ def verify_image(path):
     if not subprocess.check_output(['pacman', '-Qoq', '/usr/lib/modules/' + RELEASE + '/vmlinuz'], text=True).strip() == PACKAGE:
         raise ValueError('Kernelimage gehört nicht zum P16-Paket')
     print('UKI, ACPI-Overrides und Modulabhängigkeiten gültig:', path)
+    return cmd.strip()
 
-def verify_menu(config_path=Path('/boot/limine.conf'), boot_root=Path('/boot')):
+def verify_menu(cmdline, config_path=Path('/boot/limine.conf'), boot_root=Path('/boot')):
+    """cmdline: the P16 UKI's own. With Secure Boot off, the entry's cmdline overrides it, so they must match."""
     config = config_path.read_text()
     entries = []
     for line in config.splitlines():
@@ -107,8 +110,12 @@ def verify_menu(config_path=Path('/boot/limine.conf'), boot_root=Path('/boot')):
             if hashlib.blake2b(image.read_bytes()).hexdigest() != pin.lower():
                 raise ValueError('EFI-Hash stimmt nicht: ' + path)
             entries.append(path)
-    if IMAGE not in entries:
+    # The P16 entry is the one whose active path line boots the image; text elsewhere that names it is not.
+    p16 = [entry for entry in menu_entries(config) if re.search(r'^\s*path:\s*boot\(\):' + re.escape(IMAGE) + '#', entry, re.M)]
+    if not p16:
         raise ValueError('P16-Eintrag fehlt im Limine-Menü')
+    if any(re.findall(r'^\s*cmdline:\s*(.*?)\s*$', entry, re.M) != [cmdline] for entry in p16):
+        raise ValueError('P16-Eintrag startet nicht mit der Befehlszeile des UKI')
     for key, expected in [('quiet', 'no'), ('timeout', '10')]:
         values = re.findall(r'^' + key + r':\s*(.*?)\s*$', config, re.M)
         if values != [expected]:
@@ -121,8 +128,8 @@ if __name__ == '__main__':
     parser.add_argument('--image-only', action='store_true')
     args = parser.parse_args()
     try:
-        verify_image(args.image)
+        cmdline = verify_image(args.image)
         if not args.image_only:
-            verify_menu()
+            verify_menu(cmdline)
     except (ValueError, OSError, KeyError, struct.error, subprocess.CalledProcessError) as error:
         parser.exit(1, 'Boot-Prüfung fehlgeschlagen: ' + str(error) + '\n')

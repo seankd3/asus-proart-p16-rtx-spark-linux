@@ -2,6 +2,8 @@
 source "$(dirname "$0")/common.sh"
 require_root
 check_machine
+release=$(python3 "$REPO/scripts/p16_release.py" --shell)
+eval "$release"
 resume_backup=""
 if [[ $# != 0 ]]; then
   [[ $# == 2 && $1 == --resume ]] || { echo "Aufruf: sudo $0 [--resume /root/p16-install.<Kennung>]" >&2; exit 1; }
@@ -13,12 +15,11 @@ mountpoint -q /boot || { echo '/boot muss eingehängt sein.' >&2; exit 1; }
 exec 200>/run/lock/boot-partition.lock
 flock -w 30 200
 if [[ -z $resume_backup ]]; then
-  [[ ! -e /usr/lib/modules/$RELEASE && ! -e /boot/EFI/Linux/omarchy_$PACKAGE.efi ]] || {
+  [[ ! -e /usr/lib/modules/$RELEASE && ! -e /boot$IMAGE ]] || {
     echo 'P16-Kernel ist bereits vorhanden. Für eine abgebrochene Installation --resume mit ihrer Sicherung verwenden.' >&2; exit 1;
   }
 fi
-packages=("$REPO/kernel/$PACKAGE-$PKGVER-$PKGREL-aarch64.pkg.tar.zst" "$REPO/kernel/$PACKAGE-headers-$PKGVER-$PKGREL-aarch64.pkg.tar.zst")
-for pkg in "${packages[@]}"; do [[ -s $pkg ]] || { echo "Paket fehlt: $pkg" >&2; exit 1; }; done
+for pkg in "${PACKAGES[@]}"; do [[ -s $pkg ]] || { echo "Paket fehlt: $pkg" >&2; exit 1; }; done
 python3 - "$REPO" <<'PY'
 from pathlib import Path
 import hashlib, sys
@@ -54,11 +55,11 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 if [[ -n $resume_backup ]]; then
   # Require a root-owned checkpoint and byte-identical package inputs.
-  python3 "$REPO/scripts/install_state.py" resume "$resume_backup" "${packages[@]}"
+  python3 "$REPO/scripts/install_state.py" resume "$resume_backup" "${PACKAGES[@]}"
   backup=$resume_backup
 else
   backup=$(mktemp -d /root/p16-install.XXXXXXXX)
-  python3 "$REPO/scripts/install_state.py" begin "$backup" "${packages[@]}"
+  python3 "$REPO/scripts/install_state.py" begin "$backup" "${PACKAGES[@]}"
 fi
 printf 'Sicherung und Checkpoint: %s\n' "$backup"
 python3 "$REPO/scripts/peripherals.py" apply --backup "$backup"
@@ -69,7 +70,7 @@ for directory in /usr/share/libalpm/hooks /etc/pacman.d/hooks; do
     if [[ -e $hook ]]; then ln -sf /dev/null "$hooks/${hook##*/}"; fi
   done
 done
-pacman -U --noconfirm --hookdir "$hooks" "${packages[@]}"
+pacman -U --noconfirm --hookdir "$hooks" "${PACKAGES[@]}"
 dkms autoinstall -k "$RELEASE"
 depmod -a "$RELEASE"
 install -Dm644 "$REPO/config/p16-acpi" /etc/initcpio/install/p16-acpi
@@ -83,6 +84,8 @@ done
 for conf in 00-omarchy-n1x-usb4.conf 00-omarchy-n1x-gpu.conf 00-omarchy-n1x-sleep.conf; do
   install -Dm644 "$REPO/config/$conf" "/etc/limine-entry-tool.d/$conf"
 done
+# With Secure Boot off, the menu entry's cmdline overrides the one in the UKI. Give the entry the same one, unquoted.
+printf 'KERNEL_CMDLINE[%s]=%s\n' "$PACKAGE" "$(<"$REPO/build/p16.cmdline")" > "$CMDLINE_DROPIN"
 for table in DSDT.aml SSDT.aml; do
   install -Dm644 "$REPO/build/acpi/kernel/firmware/acpi/$table" "/etc/initcpio/p16-acpi/$table"
 done

@@ -6,9 +6,7 @@ import sys
 
 PLATFORM_OPTIONS = [
     'console=tty0', 'acpi=nospcr', 'acpi_osi=!Windows 2022',
-    'power_wrap_drv.usb4_release=0',
     'pci=hpbussize=0x80,hpmmiosize=32M,hpmmioprefsize=32G',
-    'mem_sleep_default=s2idle',
 ]
 
 
@@ -27,13 +25,17 @@ def build(text):
     for name in names:
         if name.startswith('initcall_blacklist='):
             initcalls.extend(x for x in name.split('=', 1)[1].split(',') if x)
-    args = [a for a, n in zip(args, names) if not n.startswith(blocked)]
+    # An empty word says nothing, and limine-entry-tool drops it from the menu entry.
+    args = [a for a, n in zip(args, names) if n and not n.startswith(blocked)]
     args += PLATFORM_OPTIONS + ['initcall_blacklist=' + ','.join(dict.fromkeys(initcalls))]
     for arg in args:
-        if any(c in arg for c in ('"', '\n', '\r', '\x00')):
+        # limine-entry-tool reads ' and " as quotes when it splits the entry's line into words.
+        if any(c in arg for c in ('"', "'", '\n', '\r', '\x00')):
             raise ValueError('Invalid character in kernel command line.')
-    return ' '.join('acpi_osi="!Windows 2022"' if a == 'acpi_osi=!Windows 2022' else
-                    '"' + a + '"' if any(c.isspace() for c in a) else a for a in args) + '\n'
+    words = ('acpi_osi="!Windows 2022"' if a == 'acpi_osi=!Windows 2022' else
+             '"' + a + '"' if any(c.isspace() for c in a) else a for a in args)
+    # limine-entry-tool keeps the first of equal words in the menu entry; the UKI gets the same line.
+    return ' '.join(dict.fromkeys(words)) + '\n'
 
 
 if __name__ == '__main__':

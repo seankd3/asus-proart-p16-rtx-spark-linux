@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 source "$(dirname "$0")/common.sh"
 check_machine
+release=$(python3 "$REPO/scripts/p16_release.py" --shell)
+eval "$release"
 python3 "$REPO/scripts/peripherals.py" check-installed
 [[ $(uname -r) == "$RELEASE" ]]
 printf '\nKernel\n'; uname -r

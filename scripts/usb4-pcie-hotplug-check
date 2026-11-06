@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Check that a USB4 PCIe device connected after boot gets its PCIe tunnel.
+
+Run with nothing connected to USB4, connect the device when asked, then
+disconnect it when asked. PASS needs, while connected: PCIe devices below a
+10de:22cf tunnel root port, that port in D0 with a runtime PM reference, and at
+least one NVMe controller behind it, each with a block device. After disconnect: the port
+back in D3cold with no reference. Read-only; root is not needed.
+"""
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+
+PCI = Path('/sys/bus/pci/devices')
+CHILD = re.compile(r'[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]')
+WAIT = 120
+NVME_CLASS = '0x010802'
+
+
+def read(path):
+    return Path(path).read_text().strip()
+
+
+def tunnel_ports():
+    return [p for p in sorted(PCI.iterdir())
+            if read(p / 'vendor') == '0x10de' and read(p / 'device') == '0x22cf']
+
+
+def children(port):
+    """Every PCI function below the port, at any depth."""
+    return sorted(d for d in port.resolve().rglob('*') if CHILD.fullmatch(d.name) and (d / 'vendor').exists())
+
+
+def disks(function):
+    """Block devices of an NVMe PCI function. A multipath namespace shows as nvmeXcYnZ; its disk is nvmeXnZ."""
+    names = {re.sub(r'c\d+n', 'n', n.name) for n in function.glob('nvme/nvme*/nvme*n*')}
+    return [f'/dev/{n}' for n in sorted(names) if Path('/dev', n).is_block_device()]
+
+
+def state(port):
+    return read(port / 'power_state'), int(read(port / 'power/runtime_usage'))
+
+
+def show(port):
+    power, usage = state(port)
+    print(f'  {port.name}: {power}, runtime PM references {usage}, {len(children(port))} devices below')
+
+
+def wait_for(condition, what):
+    for _ in range(WAIT * 2):
+        found = condition()
+        if found:
+            return found
+        time.sleep(0.5)
+    print(f'No {what} within {WAIT} s.')
+    return None
+
+
+def main():
+    print('Kernel', read('/proc/sys/kernel/osrelease'))
+    ports = tunnel_ports()
+    if not ports:
+        sys.exit('FAIL: no 10de:22cf tunnel root port found')
+    for port in ports:
+        show(port)
+    if any(children(p) for p in ports):
+        sys.exit('Disconnect every USB4 PCIe device, then run this again.')
+
+    input('\nConnect the USB4 NVMe enclosure, or a dock with an NVMe drive, then press Enter. ')
+    port = wait_for(lambda: next((p for p in ports if children(p)), None), 'PCIe device below a tunnel root port')
+    failures = []
+    if port is None:
+        failures.append('no PCIe tunnel: the device is on USB only')
+    else:
+        time.sleep(5)
+        print(f'\nConnected below {port.name}:')
+        print(subprocess.run(['lspci', '-tv', '-s', port.name.split(':')[0] + ':'],
+                             capture_output=True, text=True).stdout.rstrip())
+        show(port)
+        power, usage = state(port)
+        if power != 'D0':
+            failures.append(f'{port.name} is {power} while connected')
+        if usage < 1:
+            failures.append(f'{port.name} has no runtime PM reference while connected')
+        nvme = [d for d in children(port) if read(d / 'class') == NVME_CLASS]
+        if not nvme:
+            failures.append(f'no NVMe controller below {port.name}')
+        for function in nvme:
+            speed = f"{read(function / 'current_link_speed')} x{read(function / 'current_link_width')}"
+            found = wait_for(lambda: disks(function), f'block device for NVMe {function.name}')
+            print(f'  NVMe {function.name}: {", ".join(found or ["no block device"])}, PCIe {speed}')
+            if not found:
+                failures.append(f'NVMe {function.name} has no block device')
+
+        input('\nDisconnect the device, then press Enter. ')
+        gone = wait_for(lambda: not children(port) and state(port) == ('D3cold', 0) and port,
+                        'D3cold without a runtime PM reference after disconnect')
+        print('After disconnect:')
+        show(port)
+        if gone is None:
+            power, usage = state(port)
+            failures.append(f'{port.name} is {power} with {usage} references after disconnect')
+
+    print()
+    for failure in failures:
+        print('FAIL:', failure)
+    print('FAIL' if failures else 'PASS')
+    sys.exit(1 if failures else 0)
+
+
+if __name__ == '__main__':
+    main()

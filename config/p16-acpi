@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 build() {
-    [[ $KERNELVERSION == 7.2.8-14-omarchy-p16 || $KERNELVERSION == 7.2.8-14-omarchy-p16-asus || $KERNELVERSION == 7.2.8-23-omarchy-p16-asus || $KERNELVERSION == 7.2.8-24-omarchy-p16-asus || $KERNELVERSION == 7.2.8-25-omarchy-p16-asus || $KERNELVERSION == 7.2.8-23-omarchy-p16-asus-npu2 || $KERNELVERSION == 7.2.8-23-rtx-spark-npu ]] || {
+    [[ $KERNELVERSION == 7.2.8-14-omarchy-p16 || $KERNELVERSION == 7.2.8-14-omarchy-p16-asus || $KERNELVERSION == 7.2.8-23-omarchy-p16-asus || $KERNELVERSION == 7.2.8-24-omarchy-p16-asus || $KERNELVERSION == 7.2.8-25-omarchy-p16-asus || $KERNELVERSION == 7.3.0-26-omarchy-p16-asus || $KERNELVERSION == 7.2.8-23-omarchy-p16-asus-npu2 || $KERNELVERSION == 7.2.8-23-rtx-spark-npu ]] || {
         error 'P16 ACPI override requires the dedicated kernel allocation fix'
         return 1
     }
