@@ -9,7 +9,7 @@ import re
 import shutil
 import tempfile
 
-from p16_release import IMAGE, PACKAGE, RELEASE
+from p16_release import CMDLINE_DROPIN, IMAGE, PACKAGE, RELEASE
 
 TARGET = '/boot' + IMAGE
 CONFIG_PATHS = [
@@ -38,6 +38,7 @@ ADDED_CONFIG_PATHS = [
     '/etc/libinput/local-overrides.quirks',
     '/etc/mkinitcpio.conf.d/zz-p16-speakers.conf',
     '/etc/UPower/UPower.conf.d/50-p16-critical.conf',
+    CMDLINE_DROPIN,
     '/usr/lib/firmware/cirrus/cs35l56-b0-dsp1-misc-10431484-spkid0.wmfw',
     '/usr/lib/firmware/cirrus/cs35l56-b0-dsp1-misc-10431484-spkid0-l1u0.bin',
     '/usr/lib/firmware/cirrus/cs35l56-b0-dsp1-misc-10431484-spkid0-l1u1.bin',

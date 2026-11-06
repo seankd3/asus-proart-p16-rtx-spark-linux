@@ -31,17 +31,18 @@ import p16_release as release  # noqa: E402
 from p16_release import IMAGE  # noqa: E402
 
 P16_EFI = Path(IMAGE).name
+CMDLINE = 'root=/dev/mapper/root rootflags=subvol=@nv620 rw acpi_osi="!Windows 2022" console=tty0'
 
 
 def module(name, filename):
     spec = importlib.util.spec_from_file_location(name, REPO / 'scripts' / filename)
-    loaded = importlib.util.module_from_spec(spec)
+    loaded = sys.modules[name] = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(loaded)
     return loaded
 
 
+state = module('install_state', 'install_state.py')  # verify-boot imports it
 boot = module('verify_boot', 'verify-boot.py')
-state = module('install_state', 'install_state.py')
 cmdline = module('kernel_cmdline', 'kernel_cmdline.py')
 
 
@@ -56,16 +57,23 @@ class MenuTests(unittest.TestCase):
         for name in ['stock.efi', P16_EFI]:
             (self.images / name).write_bytes(name.encode())
 
-    def entry(self, name):
+    def entry(self, name, cmdline=CMDLINE):
         pin = hashlib.blake2b((self.images / name).read_bytes()).hexdigest()
-        return '  path: boot():/EFI/Linux/' + name + '#' + pin + '\n'
+        return '  //' + name + '\n  path: boot():/EFI/Linux/' + name + '#' + pin + '\n  cmdline: ' + cmdline + '\n'
 
     def verify(self, extra, options='quiet: no\ntimeout: 10\n'):
-        self.config.write_text(options + self.entry('stock.efi') + extra)
-        boot.verify_menu(self.config, self.root)
+        self.config.write_text(options + self.entry('stock.efi', 'rootflags=subvol=@') + extra)
+        boot.verify_menu(CMDLINE, self.config, self.root)
 
     def test_valid_stock_and_p16(self):
         self.verify(self.entry(P16_EFI))
+
+    def test_p16_entry_must_boot_the_uki_cmdline(self):
+        # limine-entry-tool gave a 7.3 entry the default cmdline: root @, no RMSkipACPIBattCap. With Secure Boot off it wins.
+        for line in ['rootflags=subvol=@ rw acpi_osi="!Windows 2022"', CMDLINE + ' mem_sleep_default=s2idle']:
+            with self.subTest(line=line):
+                with self.assertRaisesRegex(ValueError, 'Befehlszeile des UKI'):
+                    self.verify(self.entry(P16_EFI, line))
 
     def test_missing_p16_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'P16-Eintrag fehlt'):
@@ -89,7 +97,7 @@ class MenuTests(unittest.TestCase):
 
     def test_comments_do_not_supply_missing_entry(self):
         with self.assertRaisesRegex(ValueError, 'P16-Eintrag fehlt'):
-            self.verify('# '+self.entry(P16_EFI))
+            self.verify(''.join('# ' + line + '\n' for line in self.entry(P16_EFI).splitlines()))
 
     def test_conflicting_menu_options_are_rejected(self):
         with self.assertRaises(ValueError):

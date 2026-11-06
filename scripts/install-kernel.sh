@@ -84,6 +84,8 @@ done
 for conf in 00-omarchy-n1x-usb4.conf 00-omarchy-n1x-gpu.conf 00-omarchy-n1x-sleep.conf; do
   install -Dm644 "$REPO/config/$conf" "/etc/limine-entry-tool.d/$conf"
 done
+# With Secure Boot off, the menu entry's cmdline overrides the one in the UKI. Give the entry the same one, unquoted.
+printf 'KERNEL_CMDLINE[%s]=%s\n' "$PACKAGE" "$(<"$REPO/build/p16.cmdline")" > "$CMDLINE_DROPIN"
 for table in DSDT.aml SSDT.aml; do
   install -Dm644 "$REPO/build/acpi/kernel/firmware/acpi/$table" "/etc/initcpio/p16-acpi/$table"
 done
