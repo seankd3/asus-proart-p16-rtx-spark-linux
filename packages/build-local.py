@@ -29,6 +29,7 @@ PLATFORM = [
     '/etc/systemd/system/p16-asus-controls.service',
     '/etc/systemd/system/p16-charge-limit.service',
     '/etc/systemd/system/power-profiles-daemon.service.d/20-p16-asus.conf',
+    '/etc/UPower/UPower.conf.d/50-p16-critical.conf',
     '/etc/libinput/local-overrides.quirks',
     '/etc/pacman.d/hooks/00-p16-guard-preflight.hook',
     '/etc/pacman.d/hooks/zz-p16-boot-menu.hook',

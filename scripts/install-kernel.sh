@@ -39,7 +39,7 @@ finish() {
   if [[ -n $hooks ]]; then rm -rf "$hooks"; fi
   if (( code != 0 )) && [[ -n $backup && -f $backup/state.json ]]; then
     if python3 "$REPO/scripts/install_state.py" fail "$backup"; then
-      systemctl daemon-reload || true
+      reload_restored_config || true
       sync || true
       echo 'Bootdateien und Konfiguration wurden auf den gesicherten Stand zurückgesetzt.' >&2
     else
@@ -92,6 +92,7 @@ for unit in p16-asus-controls.service p16-charge-limit.service; do
   install -Dm644 "$REPO/config/$unit" "/etc/systemd/system/$unit"
 done
 install -Dm644 "$REPO/config/20-p16-asus.conf" /etc/systemd/system/power-profiles-daemon.service.d/20-p16-asus.conf
+install -Dm644 "$REPO/config/50-p16-critical.conf" /etc/UPower/UPower.conf.d/50-p16-critical.conf
 mkinitcpio --kernel "$RELEASE" --cmdline "$REPO/build/p16.cmdline" --uki "$REPO/build/linux-p16-asus-23.efi"
 python3 "$REPO/scripts/verify-boot.py" --image "$REPO/build/linux-p16-asus-23.efi" --image-only
 limine-entry-tool --no-hooks --no-mutex --add-uki linux-p16-asus-23 "$REPO/build/linux-p16-asus-23.efi" --comment 'ASUS ProArt P16: ACPI, SPI HID, ARM64 WMI'
@@ -109,6 +110,11 @@ python3 "$REPO/scripts/verify-boot.py"
 systemctl daemon-reload
 systemctl enable p16-charge-limit.service
 pacman -Qk linux-p16-asus-23 linux-p16-asus-23-headers
+# UPower reads its configuration only at start, and its unit has no reload.
+systemctl restart upower.service
+[[ $(busctl --system call org.freedesktop.UPower /org/freedesktop/UPower org.freedesktop.UPower GetCriticalAction) == 's "PowerOff"' ]] || {
+  echo 'UPower meldet nicht PowerOff als kritische Akkuaktion.' >&2; exit 1;
+}
 sync
 python3 "$REPO/scripts/install_state.py" complete "$backup"
 printf 'Installation abgeschlossen. Sicherung: %s\nBeim nächsten Start linux-p16-asus-23 im Limine-Menü auswählen.\n' "$backup"

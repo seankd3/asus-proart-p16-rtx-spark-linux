@@ -8,6 +8,6 @@ mountpoint -q /boot
 exec 200>/run/lock/boot-partition.lock
 flock -w 30 200
 python3 "$REPO/scripts/install_state.py" restore "$1"
-systemctl daemon-reload
+reload_restored_config
 sync
 printf 'EFI-Images, Bootmenü und Systemdateien wiederhergestellt. Kernelpakete bleiben installiert.\n'
