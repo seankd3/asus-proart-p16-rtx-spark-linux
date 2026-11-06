@@ -13,11 +13,11 @@ mountpoint -q /boot || { echo '/boot muss eingehängt sein.' >&2; exit 1; }
 exec 200>/run/lock/boot-partition.lock
 flock -w 30 200
 if [[ -z $resume_backup ]]; then
-  [[ ! -e /usr/lib/modules/$RELEASE && ! -e /boot/EFI/Linux/omarchy_linux-p16-asus-23.efi ]] || {
+  [[ ! -e /usr/lib/modules/$RELEASE && ! -e /boot/EFI/Linux/omarchy_$PACKAGE.efi ]] || {
     echo 'P16-Kernel ist bereits vorhanden. Für eine abgebrochene Installation --resume mit ihrer Sicherung verwenden.' >&2; exit 1;
   }
 fi
-packages=("$REPO/kernel/linux-p16-asus-23-7.2.8-23-aarch64.pkg.tar.zst" "$REPO/kernel/linux-p16-asus-23-headers-7.2.8-23-aarch64.pkg.tar.zst")
+packages=("$REPO/kernel/$PACKAGE-$PKGVER-$PKGREL-aarch64.pkg.tar.zst" "$REPO/kernel/$PACKAGE-headers-$PKGVER-$PKGREL-aarch64.pkg.tar.zst")
 for pkg in "${packages[@]}"; do [[ -s $pkg ]] || { echo "Paket fehlt: $pkg" >&2; exit 1; }; done
 python3 - "$REPO" <<'PY'
 from pathlib import Path
@@ -93,9 +93,9 @@ for unit in p16-asus-controls.service p16-charge-limit.service; do
 done
 install -Dm644 "$REPO/config/20-p16-asus.conf" /etc/systemd/system/power-profiles-daemon.service.d/20-p16-asus.conf
 install -Dm644 "$REPO/config/50-p16-critical.conf" /etc/UPower/UPower.conf.d/50-p16-critical.conf
-mkinitcpio --kernel "$RELEASE" --cmdline "$REPO/build/p16.cmdline" --uki "$REPO/build/linux-p16-asus-23.efi"
-python3 "$REPO/scripts/verify-boot.py" --image "$REPO/build/linux-p16-asus-23.efi" --image-only
-limine-entry-tool --no-hooks --no-mutex --add-uki linux-p16-asus-23 "$REPO/build/linux-p16-asus-23.efi" --comment 'ASUS ProArt P16: ACPI, SPI HID, ARM64 WMI'
+mkinitcpio --kernel "$RELEASE" --cmdline "$REPO/build/p16.cmdline" --uki "$REPO/build/$PACKAGE.efi"
+python3 "$REPO/scripts/verify-boot.py" --image "$REPO/build/$PACKAGE.efi" --image-only
+limine-entry-tool --no-hooks --no-mutex --add-uki "$PACKAGE" "$REPO/build/$PACKAGE.efi" --comment 'ASUS ProArt P16: ACPI, SPI HID, ARM64 WMI'
 python3 - <<'PY'
 from pathlib import Path
 import re
@@ -109,7 +109,7 @@ python3 "$REPO/scripts/install_state.py" verify "$backup"
 python3 "$REPO/scripts/verify-boot.py"
 systemctl daemon-reload
 systemctl enable p16-charge-limit.service
-pacman -Qk linux-p16-asus-23 linux-p16-asus-23-headers
+pacman -Qk "$PACKAGE" "$PACKAGE-headers"
 # UPower reads its configuration only at start, and its unit has no reload.
 systemctl restart upower.service
 [[ $(busctl --system call org.freedesktop.UPower /org/freedesktop/UPower org.freedesktop.UPower GetCriticalAction) == 's "PowerOff"' ]] || {
@@ -117,4 +117,4 @@ systemctl restart upower.service
 }
 sync
 python3 "$REPO/scripts/install_state.py" complete "$backup"
-printf 'Installation abgeschlossen. Sicherung: %s\nBeim nächsten Start linux-p16-asus-23 im Limine-Menü auswählen.\n' "$backup"
+printf 'Installation abgeschlossen. Sicherung: %s\nBeim nächsten Start %s im Limine-Menü auswählen.\n' "$backup" "$PACKAGE"
