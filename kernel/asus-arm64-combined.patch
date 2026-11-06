@@ -12798,7 +12798,7 @@
 +	.input_phys = ASUS_NB_WMI_FILE "/input0",
 +	.detect_quirks = asus_nb_wmi_quirks,
 +	.key_filter = asus_nb_wmi_key_filter,
-+	.i8042_filter = asus_i8042_filter,
++	.i8042_filter = IS_ENABLED(CONFIG_SERIO_I8042) ? asus_i8042_filter : NULL,
 +};
 +
 +
