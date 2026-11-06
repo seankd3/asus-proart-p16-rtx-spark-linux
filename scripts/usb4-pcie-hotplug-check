@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Check that a USB4 PCIe device connected after boot gets its PCIe tunnel.
+
+Run with nothing connected to USB4, connect the device when asked, then
+disconnect it when asked. PASS needs, while connected: PCIe devices below a
+10de:22cf tunnel root port, that port in D0 with a runtime PM reference, and a
+block device for each NVMe controller behind it. After disconnect: the port
+back in D3cold with no reference. Read-only; root is not needed.
+"""
+from pathlib import Path
+import re
+import subprocess
+import sys
+import time
+
+PCI = Path('/sys/bus/pci/devices')
+CHILD = re.compile(r'[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]')
+WAIT = 120
+
+
+def read(path):
+    return Path(path).read_text().strip()
+
+
+def tunnel_ports():
+    return [p for p in sorted(PCI.iterdir())
+            if read(p / 'vendor') == '0x10de' and read(p / 'device') == '0x22cf']
+
+
+def children(port):
+    """Every PCI function below the port, at any depth."""
+    return sorted(d for d in port.resolve().rglob('*') if CHILD.fullmatch(d.name) and (d / 'vendor').exists())
+
+
+def state(port):
+    return read(port / 'power_state'), int(read(port / 'power/runtime_usage'))
+
+
+def show(port):
+    power, usage = state(port)
+    print(f'  {port.name}: {power}, runtime PM references {usage}, {len(children(port))} devices below')
+
+
+def wait_for(condition, what):
+    for _ in range(WAIT * 2):
+        found = condition()
+        if found:
+            return found
+        time.sleep(0.5)
+    print(f'No {what} within {WAIT} s.')
+    return None
+
+
+def main():
+    print('Kernel', read('/proc/sys/kernel/osrelease'))
+    ports = tunnel_ports()
+    if not ports:
+        sys.exit('FAIL: no 10de:22cf tunnel root port found')
+    for port in ports:
+        show(port)
+    if any(children(p) for p in ports):
+        sys.exit('Disconnect every USB4 PCIe device, then run this again.')
+
+    input('\nConnect the USB4 dock or NVMe enclosure, then press Enter. ')
+    port = wait_for(lambda: next((p for p in ports if children(p)), None), 'PCIe device below a tunnel root port')
+    failures = []
+    if port is None:
+        failures.append('no PCIe tunnel: the device is on USB only')
+    else:
+        time.sleep(5)
+        print(f'\nConnected below {port.name}:')
+        print(subprocess.run(['lspci', '-tv', '-s', port.name.split(':')[0] + ':'],
+                             capture_output=True, text=True).stdout.rstrip())
+        show(port)
+        power, usage = state(port)
+        if power != 'D0':
+            failures.append(f'{port.name} is {power} while connected')
+        if usage < 1:
+            failures.append(f'{port.name} has no runtime PM reference while connected')
+        below = {d.name for d in children(port)}
+        for controller in sorted(Path('/sys/class/nvme').glob('nvme*')):
+            if controller.joinpath('device').resolve().name not in below:
+                continue
+            # A multipath namespace shows here as nvmeXcYnZ; its disk is nvmeXnZ.
+            disks = sorted({re.sub(r'c\d+n', 'n', n.name) for n in controller.glob('nvme*n*')})
+            device = controller.joinpath('device').resolve()
+            speed = f"{read(device / 'current_link_speed')} x{read(device / 'current_link_width')}"
+            print(f'  NVMe {controller.name}: {", ".join("/dev/" + d for d in disks) or "no namespace"}, PCIe {speed}')
+            if not any(Path('/dev', d).is_block_device() for d in disks):
+                failures.append(f'{controller.name} has no block device')
+
+        input('\nDisconnect the device, then press Enter. ')
+        gone = wait_for(lambda: not children(port) and state(port)[0] == 'D3cold' and port, 'D3cold after disconnect')
+        print('After disconnect:')
+        show(port)
+        if gone is None:
+            power, usage = state(port)
+            failures.append(f'{port.name} is {power} with {usage} references after disconnect')
+
+    print()
+    for failure in failures:
+        print('FAIL:', failure)
+    print('FAIL' if failures else 'PASS')
+    sys.exit(1 if failures else 0)
+
+
+if __name__ == '__main__':
+    main()
