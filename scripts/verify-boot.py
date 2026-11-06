@@ -110,11 +110,12 @@ def verify_menu(cmdline, config_path=Path('/boot/limine.conf'), boot_root=Path('
             if hashlib.blake2b(image.read_bytes()).hexdigest() != pin.lower():
                 raise ValueError('EFI-Hash stimmt nicht: ' + path)
             entries.append(path)
-    if IMAGE not in entries:
+    # The P16 entry is the one whose active path line boots the image; text elsewhere that names it is not.
+    p16 = [entry for entry in menu_entries(config) if re.search(r'^\s*path:\s*boot\(\):' + re.escape(IMAGE) + '#', entry, re.M)]
+    if not p16:
         raise ValueError('P16-Eintrag fehlt im Limine-Menü')
-    for entry in menu_entries(config):
-        if re.search(r'^\s*path:\s*boot\(\):' + re.escape(IMAGE) + '#', entry, re.M) and re.findall(r'^\s*cmdline:\s*(.*?)\s*$', entry, re.M) != [cmdline]:
-            raise ValueError('P16-Eintrag startet nicht mit der Befehlszeile des UKI')
+    if any(re.findall(r'^\s*cmdline:\s*(.*?)\s*$', entry, re.M) != [cmdline] for entry in p16):
+        raise ValueError('P16-Eintrag startet nicht mit der Befehlszeile des UKI')
     for key, expected in [('quiet', 'no'), ('timeout', '10')]:
         values = re.findall(r'^' + key + r':\s*(.*?)\s*$', config, re.M)
         if values != [expected]:

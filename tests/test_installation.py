@@ -102,6 +102,10 @@ class MenuTests(unittest.TestCase):
     def test_comments_do_not_supply_missing_entry(self):
         with self.assertRaisesRegex(ValueError, 'P16-Eintrag fehlt'):
             self.verify(''.join('# ' + line + '\n' for line in self.entry(P16_EFI).splitlines()))
+        # A comment field that holds the image's pinned path is not an entry either.
+        pinned = self.entry(P16_EFI).splitlines()[1].split('path: ')[1]
+        with self.assertRaisesRegex(ValueError, 'P16-Eintrag fehlt'):
+            self.verify('  comment: ' + pinned + '\n')
 
     def test_conflicting_menu_options_are_rejected(self):
         with self.assertRaises(ValueError):
@@ -435,11 +439,29 @@ class CommandLineTests(unittest.TestCase):
         # A kept argument keeps its exact value, spaces included.
         self.assertIn('"rootflags=subvol=system "', result)
 
-    def test_repeated_words_appear_once(self):
-        # limine-entry-tool drops repeated words from the menu entry; a UKI that kept them failed the menu check.
-        result = cmdline.build('root=/dev/mapper/root quiet quiet splash quiet').split()
-        self.assertEqual(result.count('quiet'), 1)
-        self.assertLess(result.index('quiet'), result.index('splash'))
+    def test_menu_entry_keeps_the_built_line(self):
+        # limine-entry-tool 1.40.0 BootOptions.cleanKernelParameters rewrites the entry's line: it splits words at
+        # whitespace outside ' or " and keeps the first of equal words. A line it changed failed the menu check.
+        def entry_line(text):
+            words, word, quote = [], '', ''
+            for c in text:
+                if quote:
+                    word += c
+                    quote = '' if c == quote else quote
+                elif c in '"\'':
+                    quote, word = c, word + c
+                elif c.isspace():
+                    words, word = words + [word] if word else words, ''
+                else:
+                    word += c
+            return ' '.join(dict.fromkeys(words + [word] if word else words))
+        for text in ['root=/dev/mapper/root quiet quiet splash quiet', 'root=/dev/mapper/root ""',
+                     'root=/dev/mapper/root "rootflags=subvol=a  b" \' acpi_osi="!Windows 2022"\'']:
+            with self.subTest(text=text):
+                line = cmdline.build(text).strip()
+                self.assertEqual(entry_line(line), line)
+        with self.assertRaises(ValueError):
+            cmdline.build('root=/dev/mapper/root "rootflags=subvol=O\'Reilly"')
 
     def test_live_iso_is_rejected(self):
         with self.assertRaises(ValueError):
