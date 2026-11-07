@@ -8,7 +8,7 @@ import struct
 import subprocess
 import tempfile
 from p16_release import IMAGE, PACKAGE, RELEASE
-PINS = {'DSDT.aml': '80e0ad4a051704003d09029cb600a9814e1cd370ce774b9749dc09d2232b5aaf', 'SSDT.aml': '9b28ffc14c19f8b7ea2278de88ff9ec070f5f70401107d81fef067a916aa9695'}
+PINS = {'SSDT.aml': '9b28ffc14c19f8b7ea2278de88ff9ec070f5f70401107d81fef067a916aa9695'}
 
 def sections(path):
     data = Path(path).read_bytes()
@@ -60,7 +60,7 @@ def verify_image(path):
         fields = [int(data[offset + 6 + i * 8:offset + 14 + i * 8], 16) for i in range(13)]
         size, namesize = (fields[6], fields[11])
         start = offset + 110
-        name = data[start:start + namesize - 1].decode().removeprefix('./')
+        name = data[start:start + namesize - 1].decode().removeprefix('./').rstrip('/')
         start = start + namesize + 3 & ~3
         if not start + size <= len(data):
             raise ValueError('Abgeschnittenes frühes CPIO-Archiv')
@@ -68,6 +68,10 @@ def verify_image(path):
         offset = start + size + 3 & ~3
         if name == 'TRAILER!!!':
             break
+    expected = {'kernel/firmware/acpi/' + name for name in PINS}
+    actual = {name for name in files if name.startswith('kernel/firmware/acpi/')}
+    if actual != expected:
+        raise ValueError('Only the ASUS SSDT override is allowed; use the native firmware DSDT')
     for name, pin in PINS.items():
         if not hashlib.sha256(files['kernel/firmware/acpi/' + name]).hexdigest() == pin:
             raise ValueError('Falsche ACPI-Tabelle im UKI: ' + name)

@@ -4,9 +4,8 @@ build() {
         error 'P16 ACPI override requires the dedicated kernel allocation fix'
         return 1
     }
-    add_file_early /etc/initcpio/p16-acpi/DSDT.aml /kernel/firmware/acpi/DSDT.aml
     add_file_early /etc/initcpio/p16-acpi/SSDT.aml /kernel/firmware/acpi/SSDT.aml
 }
 help() {
-    echo 'Hash-validated H7607BA.300 SSPM and EC/battery fixes, for the dedicated P16 kernel only.'
+    echo 'Hash-validated H7607BA.300 ASUS EC/battery fix, for the dedicated P16 kernel only.'
 }

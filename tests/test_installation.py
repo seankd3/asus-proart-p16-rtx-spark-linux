@@ -31,6 +31,68 @@ def module(name, filename):
 boot = module('verify_boot', 'verify-boot.py')
 state = module('install_state', 'install_state.py')
 cmdline = module('kernel_cmdline', 'kernel_cmdline.py')
+acpi = module('acpi_builder', '../acpi/acpi_builder.py')
+
+
+class NativeDSDTTests(unittest.TestCase):
+    def test_relocated_dsdt_does_not_change_selected_asus_table(self):
+        ssdt = bytearray(36)
+        ssdt[:4] = b'SSDT'
+        struct.pack_into('<I', ssdt, 4, len(ssdt))
+        ssdt[10:24] = acpi.ASUS_SSDT
+        ssdt[9] = -sum(ssdt) % 256
+        with tempfile.TemporaryDirectory() as tmp:
+            dump = Path(tmp)
+            (dump / 'SSDT9').write_bytes(ssdt)
+            for address in (0x86f50000, 0x86f70000):
+                dsdt = bytearray(40)
+                dsdt[:4] = b'DSDT'
+                struct.pack_into('<I', dsdt, 4, len(dsdt))
+                struct.pack_into('<I', dsdt, 36, address)
+                dsdt[9] = -sum(dsdt) % 256
+                (dump / 'DSDT').write_bytes(dsdt)
+                found = acpi.dumped_tables(dump)
+                self.assertEqual(found, {b'SSDT': {bytes(ssdt): ['SSDT9']}})
+
+    def test_initramfs_hook_embeds_only_asus_ssdt(self):
+        script = 'source "$1"\nadd_file_early() { printf "%s %s\\n" "$1" "$2"; }\nbuild\n'
+        result = subprocess.check_output(
+            ['bash', '-c', script, 'bash', str(REPO / 'config/p16-acpi')],
+            env=dict(os.environ, KERNELVERSION=boot.RELEASE), text=True)
+        self.assertEqual(result.splitlines(),
+                         ['/etc/initcpio/p16-acpi/SSDT.aml /kernel/firmware/acpi/SSDT.aml'])
+
+    def test_boot_verifier_rejects_a_stale_dsdt_even_with_valid_ssdt(self):
+        ssdt = b'fixture ASUS table'
+        early = (acpi.member('kernel/firmware/acpi/', b'', 0o40755, 1) +
+                 acpi.member('kernel/firmware/acpi/SSDT.aml', ssdt, 0o100644, 2))
+        sec = {'.uname': boot.RELEASE.encode(), '.linux': b'kernel',
+               '.cmdline': b'acpi_osi="!Windows 2022" console=tty0 acpi=nospcr'}
+        metadata = (' T arch_alloc_acpi_tables\n' + '\n'.join(
+            name + '=m' for name in ('CONFIG_ACPI_WMI', 'CONFIG_ASUS_WMI',
+                                    'CONFIG_ASUS_NB_WMI', 'CONFIG_SPI_HID_ACPI')) +
+                    '\nCONFIG_ACPI_TABLE_UPGRADE=y\n')
+
+        def output(args, **kwargs):
+            if args[0] == 'lsinitcpio':
+                return '\n'.join('/' + name + '.ko' for name in (
+                    'nvidia', 'nvidia-drm', 'hid-asus', 'spi-hid-acpi', 'i2c-mt65xx', 'i2c-hid-acpi'))
+            return {'modprobe': '', 'modinfo': boot.RELEASE, 'pacman': boot.PACKAGE}[args[0]]
+
+        with patch.object(boot, 'sections', return_value=sec), \
+                patch.object(Path, 'read_text', return_value=metadata), \
+                patch.object(Path, 'read_bytes', return_value=b'kernel'), \
+                patch.object(boot, 'PINS', {'SSDT.aml': hashlib.sha256(ssdt).hexdigest()}), \
+                patch.object(subprocess, 'check_output', side_effect=output):
+            sec['.initrd'] = early + acpi.member('TRAILER!!!', b'', 0, 2)
+            boot.verify_image('fixture.efi')
+            for name in ('DSDT.aml', 'DSDT.bin'):
+                with self.subTest(name=name):
+                    sec['.initrd'] = (early + acpi.member('kernel/firmware/acpi/' + name,
+                                                       b'stale firmware addresses', 0o100644, 2) +
+                                      acpi.member('TRAILER!!!', b'', 0, 3))
+                    with self.assertRaisesRegex(ValueError, 'native firmware DSDT'):
+                        boot.verify_image('fixture.efi')
 
 
 class MenuTests(unittest.TestCase):

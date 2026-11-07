@@ -27,7 +27,6 @@ spec.loader.exec_module(module)
 report = module.build(build / 'firmware', repo=out, iasl=str(compiler / 'generate/unix/bin/iasl'))
 (out / 'manifest.json').write_text(json.dumps(report, indent=2) + '\n')
 subprocess.run(['bsdtar', '-xf', str(out / module.ARCHIVE_PATH), '-C', str(out)], check=True)
-for name, expected in [('DSDT.aml', module.DSDT_OUTPUT), ('SSDT.aml', module.SSDT_OUTPUT)]:
-    if not hashlib.sha256((out / 'kernel/firmware/acpi' / name).read_bytes()).hexdigest() == expected:
-        raise ValueError('Validierung fehlgeschlagen')
+if not hashlib.sha256((out / 'kernel/firmware/acpi/SSDT.aml').read_bytes()).hexdigest() == module.SSDT_OUTPUT:
+    raise ValueError('Validierung fehlgeschlagen')
 print('ACPI-Dateien:', out / 'kernel/firmware/acpi')
