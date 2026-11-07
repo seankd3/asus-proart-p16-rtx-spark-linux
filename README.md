@@ -122,7 +122,7 @@ Confirm replacement of `power-profiles-daemon` if Pacman prompts for it. The Oma
 ## 3. Generate the ACPI overrides
 
 The [ACPI builder and battery-method transformations](https://github.com/pfeifferj/archlinuxarm-proart-p16/tree/3484cc008a9ee00b34c086c729e28e935cbc3430/01-platform/acpi/payload/provenance/hardware)
-come from Josephine Pfeiffer's repository. Their source is retained unchanged;
+come from Josephine Pfeiffer's repository. Their source is adapted here;
 this repository adds the Omarchy build/install wrappers and kernel-specific
 initramfs integration. See [the retained MIT license](acpi/LICENSE).
 
@@ -133,17 +133,25 @@ sudo ./scripts/dump-acpi.sh
 python3 scripts/build-acpi.py
 ```
 
-The build uses the included ACPICA **20260408** source and checks the original tables and both generated overrides against pinned SHA-256 hashes. It rejects other firmware tables and tables that have already been patched. The dump script creates the parent `build/` directory with ownership assigned to the user who will compile the sources. It refuses to overwrite an existing `build/firmware/` directory.
+The build uses the included ACPICA **20260408** source and checks the original tables and the generated ASUS SSDT override against pinned SHA-256 hashes. It rejects other firmware tables and tables that have already been patched. The dump script creates the parent `build/` directory with ownership assigned to the user who will compile the sources. It refuses to overwrite an existing `build/firmware/` directory.
+
+If you generated ACPI files with an older version, retain `build/firmware/` and move the old output aside before rebuilding:
+
+```bash
+mv -T --no-clobber build/acpi build/acpi-before-native-dsdt
+python3 scripts/build-acpi.py
+```
+
+If the backup directory already exists, choose another unused name. The builder refuses to replace different existing output bytes.
 
 Outputs:
 
 ```text
-build/acpi/kernel/firmware/acpi/DSDT.aml
 build/acpi/kernel/firmware/acpi/SSDT.aml
 build/acpi/manifest.json
 ```
 
-The DSDT corrects SSPM enumeration; the SSDT corrects EC and battery methods. The kernel includes the ARM64 allocation fix required for these overrides. Load the tables through the included initramfs hook for the P16 kernel. This does not flash the BIOS.
+The SSDT corrects EC and battery methods. The existing `acpi_osi="!Windows 2022"` boot option enables SSPM. Keep the native DSDT: its firmware-data address can move between boots on the same BIOS. A copied DSDT can then hide CPU devices and prevent CPU frequency controls from loading. The initramfs hook includes only the ASUS SSDT. This does not flash the BIOS.
 
 ## 4. Build the P16 kernel
 
@@ -459,7 +467,7 @@ They identify the inputs used here, independently of later upstream changes.
 
 | Component | Source and treatment in this repository |
 |---|---|
-| ACPI builder and battery transformations | [Pfeiffer's ACPI sources](https://github.com/pfeifferj/archlinuxarm-proart-p16/tree/3484cc008a9ee00b34c086c729e28e935cbc3430/01-platform/acpi/payload/provenance/hardware): `acpi_builder.py`, `power-method-changes.json`, `power-source.sed` and `power-splice.json` are byte-identical copies under `acpi/`. Our scripts wrap them for local firmware dumps, builds and Omarchy installation. |
+| ACPI builder and battery transformations | [Pfeiffer's ACPI sources](https://github.com/pfeifferj/archlinuxarm-proart-p16/tree/3484cc008a9ee00b34c086c729e28e935cbc3430/01-platform/acpi/payload/provenance/hardware): `power-method-changes.json`, `power-source.sed` and `power-splice.json` are byte-identical copies under `acpi/`. We adapted `acpi_builder.py` to retain the native DSDT. Our scripts wrap it for local firmware dumps, builds and Omarchy installation. |
 | ARM64 ACPI allocation fix | [Source patch](https://github.com/pfeifferj/archlinuxarm-proart-p16/blob/3484cc008a9ee00b34c086c729e28e935cbc3430/01-platform/kernel/patches/provenance/hardware/backports/acpi/0001-arm64-bound-acpi-override-allocation.patch): copied unchanged as [kernel/arm64-acpi-allocation.patch](kernel/arm64-acpi-allocation.patch), integrated into the Omarchy kernel recipe. |
 | Touchpad pressure workaround | [Source quirk](https://github.com/pfeifferj/archlinuxarm-proart-p16/blob/3484cc008a9ee00b34c086c729e28e935cbc3430/03-system/input-audio/payload/runtime/usr/share/libinput/60-h7607a-touchpad.quirks): same device IDs and pressure settings; local section name/DMI pattern and installation into `/etc/libinput/local-overrides.quirks` instead of a packaged `/usr/share/libinput/` file. |
 | Speaker firmware | [Source lock](https://github.com/pfeifferj/archlinuxarm-proart-p16/blob/3484cc008a9ee00b34c086c729e28e935cbc3430/07-build/media/payload/locks/hardware.json): extraction metadata for the three `spkid0` files is retained in [config/speaker-firmware.json](config/speaker-firmware.json). Firmware is downloaded from ASUS and extracted locally; no firmware binaries are redistributed. |

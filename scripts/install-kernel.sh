@@ -23,7 +23,7 @@ python3 - "$REPO" <<'PY'
 from pathlib import Path
 import hashlib, sys
 root = Path(sys.argv[1]) / 'build/acpi/kernel/firmware/acpi'
-for name, pin in {'DSDT.aml':'80e0ad4a051704003d09029cb600a9814e1cd370ce774b9749dc09d2232b5aaf', 'SSDT.aml':'9b28ffc14c19f8b7ea2278de88ff9ec070f5f70401107d81fef067a916aa9695'}.items():
+for name, pin in {'SSDT.aml':'9b28ffc14c19f8b7ea2278de88ff9ec070f5f70401107d81fef067a916aa9695'}.items():
     if hashlib.sha256((root/name).read_bytes()).hexdigest() != pin:
         raise ValueError('ACPI-Prüfsumme stimmt nicht: ' + name)
 PY
@@ -83,9 +83,7 @@ done
 for conf in 00-omarchy-n1x-usb4.conf 00-omarchy-n1x-gpu.conf 00-omarchy-n1x-sleep.conf; do
   install -Dm644 "$REPO/config/$conf" "/etc/limine-entry-tool.d/$conf"
 done
-for table in DSDT.aml SSDT.aml; do
-  install -Dm644 "$REPO/build/acpi/kernel/firmware/acpi/$table" "/etc/initcpio/p16-acpi/$table"
-done
+install -Dm644 "$REPO/build/acpi/kernel/firmware/acpi/SSDT.aml" /etc/initcpio/p16-acpi/SSDT.aml
 install -Dm755 "$REPO/scripts/p16-charge-limit" /usr/local/libexec/p16-charge-limit
 install -Dm755 "$REPO/scripts/p16-temperatures" /usr/local/bin/p16-temperatures
 for unit in p16-asus-controls.service p16-charge-limit.service; do

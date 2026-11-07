@@ -22,6 +22,7 @@ CONFIG_PATHS = [
     '/etc/systemd/system/power-profiles-daemon.service.d/20-p16-asus.conf',
     '/etc/systemd/system/multi-user.target.wants/p16-charge-limit.service',
     '/usr/local/libexec/p16-charge-limit', '/usr/local/bin/p16-temperatures',
+    # Keep the old DSDT in checkpoints so rollback can restore earlier installs.
     '/etc/initcpio/p16-acpi/DSDT.aml', '/etc/initcpio/p16-acpi/SSDT.aml',
 ]
 
