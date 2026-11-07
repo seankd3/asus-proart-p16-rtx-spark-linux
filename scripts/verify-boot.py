@@ -55,7 +55,7 @@ def verify_image(path):
         raise ValueError('Unzulässige ACPI-Deaktivierung im UKI')
     data = sec['.initrd']
     offset = 0
-    files = {}
+    files = []
     while data[offset:offset + 6] in (b'070701', b'070702'):
         fields = [int(data[offset + 6 + i * 8:offset + 14 + i * 8], 16) for i in range(13)]
         size, namesize = (fields[6], fields[11])
@@ -64,16 +64,16 @@ def verify_image(path):
         start = start + namesize + 3 & ~3
         if not start + size <= len(data):
             raise ValueError('Abgeschnittenes frühes CPIO-Archiv')
-        files[name] = data[start:start + size]
+        if name.startswith('kernel/firmware/acpi/'):
+            files.append((name, data[start:start + size]))
         offset = start + size + 3 & ~3
         if name == 'TRAILER!!!':
             break
-    expected = {'kernel/firmware/acpi/' + name for name in PINS}
-    actual = {name for name in files if name.startswith('kernel/firmware/acpi/')}
-    if actual != expected:
+    expected = sorted('kernel/firmware/acpi/' + name for name in PINS)
+    if sorted(name for name, content in files) != expected:
         raise ValueError('Only the ASUS SSDT override is allowed; use the native firmware DSDT')
-    for name, pin in PINS.items():
-        if not hashlib.sha256(files['kernel/firmware/acpi/' + name]).hexdigest() == pin:
+    for name, content in files:
+        if not hashlib.sha256(content).hexdigest() == PINS[name.removeprefix('kernel/firmware/acpi/')]:
             raise ValueError('Falsche ACPI-Tabelle im UKI: ' + name)
     with tempfile.NamedTemporaryFile() as tmp:
         tmp.write(data)

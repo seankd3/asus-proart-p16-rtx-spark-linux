@@ -35,25 +35,6 @@ acpi = module('acpi_builder', '../acpi/acpi_builder.py')
 
 
 class NativeDSDTTests(unittest.TestCase):
-    def test_relocated_dsdt_does_not_change_selected_asus_table(self):
-        ssdt = bytearray(36)
-        ssdt[:4] = b'SSDT'
-        struct.pack_into('<I', ssdt, 4, len(ssdt))
-        ssdt[10:24] = acpi.ASUS_SSDT
-        ssdt[9] = -sum(ssdt) % 256
-        with tempfile.TemporaryDirectory() as tmp:
-            dump = Path(tmp)
-            (dump / 'SSDT9').write_bytes(ssdt)
-            for address in (0x86f50000, 0x86f70000):
-                dsdt = bytearray(40)
-                dsdt[:4] = b'DSDT'
-                struct.pack_into('<I', dsdt, 4, len(dsdt))
-                struct.pack_into('<I', dsdt, 36, address)
-                dsdt[9] = -sum(dsdt) % 256
-                (dump / 'DSDT').write_bytes(dsdt)
-                found = acpi.dumped_tables(dump)
-                self.assertEqual(found, {b'SSDT': {bytes(ssdt): ['SSDT9']}})
-
     def test_initramfs_hook_embeds_only_asus_ssdt(self):
         script = 'source "$1"\nadd_file_early() { printf "%s %s\\n" "$1" "$2"; }\nbuild\n'
         result = subprocess.check_output(
@@ -93,6 +74,12 @@ class NativeDSDTTests(unittest.TestCase):
                                       acpi.member('TRAILER!!!', b'', 0, 3))
                     with self.assertRaisesRegex(ValueError, 'native firmware DSDT'):
                         boot.verify_image('fixture.efi')
+            # A later valid entry must not hide a preceding table under the same path.
+            sec['.initrd'] = (acpi.member('kernel/firmware/acpi/SSDT.aml',
+                                         b'DSDT with stale addresses', 0o100644, 3) +
+                              early + acpi.member('TRAILER!!!', b'', 0, 4))
+            with self.assertRaisesRegex(ValueError, 'native firmware DSDT'):
+                boot.verify_image('fixture.efi')
 
 
 class MenuTests(unittest.TestCase):

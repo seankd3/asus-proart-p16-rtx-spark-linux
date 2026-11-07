@@ -135,6 +135,15 @@ python3 scripts/build-acpi.py
 
 The build uses the included ACPICA **20260408** source and checks the original tables and the generated ASUS SSDT override against pinned SHA-256 hashes. It rejects other firmware tables and tables that have already been patched. The dump script creates the parent `build/` directory with ownership assigned to the user who will compile the sources. It refuses to overwrite an existing `build/firmware/` directory.
 
+If you generated ACPI files with an older version, retain `build/firmware/` and move the old output aside before rebuilding:
+
+```bash
+mv -T --no-clobber build/acpi build/acpi-before-native-dsdt
+python3 scripts/build-acpi.py
+```
+
+If the backup directory already exists, choose another unused name. The builder refuses to replace different existing output bytes.
+
 Outputs:
 
 ```text
