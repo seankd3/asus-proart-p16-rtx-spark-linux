@@ -15,7 +15,6 @@ SPEAKER = REPO / 'config/speaker-firmware.json'
 
 PLATFORM = [
     '/etc/initcpio/install/p16-acpi',
-    '/etc/initcpio/p16-acpi/DSDT.aml',
     '/etc/initcpio/p16-acpi/SSDT.aml',
     '/etc/mkinitcpio.conf.d/zz-p16-hardware-fixes.conf',
     '/etc/mkinitcpio.conf.d/zz-p16-input.conf',
@@ -57,6 +56,7 @@ PACKAGES = {
     'p16-mayflower': MAYFLOWER,
 }
 SOURCES = {
+    '/etc/initcpio/install/p16-acpi': REPO / 'config/p16-acpi',
     '/usr/local/sbin/p16-mkinitcpio-managed': REPO / 'scripts/p16-mkinitcpio-managed',
     '/usr/local/sbin/p16-guard-preflight': REPO / 'scripts/p16-guard-preflight',
     '/usr/share/p16-platform/90-mkinitcpio-install.hook': REPO / 'config/90-mkinitcpio-install.hook',
